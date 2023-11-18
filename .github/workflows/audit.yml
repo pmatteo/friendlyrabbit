@@ -77,5 +77,5 @@ jobs:
 
       - name: Run tests
         run: |
-          go test --short -timeout 30s -vet=off -v github.com/pmatteo/turborabbitmq/tests/unit
-          go test --short -timeout 30s -vet=off -v github.com/pmatteo/turborabbitmq/tests/integration
+          go test --short -timeout 30s -vet=off -v github.com/pmatteo/friendlyrabbit/tests/unit
+          go test --short -timeout 30s -vet=off -v github.com/pmatteo/friendlyrabbit/tests/integration
