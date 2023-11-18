@@ -118,9 +118,9 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 	purgeQueue(b)
 
 	timeDuration := time.Duration(5 * time.Minute)
-	conTimeoutDuration := timeDuration + (30 * time.Second)
+	conTimeoutDuration := timeDuration + (5 * time.Second)
 	if testing.Short() {
-		timeDuration = time.Duration(25 * time.Second)
+		timeDuration = time.Duration(1 * time.Minute)
 		conTimeoutDuration = timeDuration + (5 * time.Second)
 	}
 
@@ -141,7 +141,7 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
 	consumer.StartConsuming()
 
-	go publishLoop(b, conMap, publishDone, timeDuration, publisher)
+	go publishWithConfirmation(b, conMap, publishDone, timeDuration, publisher)
 	go consumeLoop(b, conMap, consumerDone, conTimeoutDuration, publisher, consumer)
 
 	<-publishDone

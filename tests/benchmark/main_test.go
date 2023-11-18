@@ -108,7 +108,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func publishLoop(
+func publishWithConfirmation(
 	b *testing.B,
 	conMap cmap.ConcurrentMap,
 	done chan bool,
