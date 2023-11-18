@@ -54,28 +54,6 @@ func NewPublisherFromConfig(
 	}
 }
 
-// NewPublisher creates and configures a new Publisher.
-func NewPublisher(
-	cp *ConnectionPool,
-	sleepOnIdleInterval time.Duration,
-	sleepOnErrorInterval time.Duration,
-	publishTimeOutDuration time.Duration) *Publisher {
-
-	return &Publisher{
-		ConnectionPool:         cp,
-		letters:                make(chan *Letter, 1000),
-		autoStop:               make(chan bool, 1),
-		autoPublishGroup:       &sync.WaitGroup{},
-		publishReceipts:        make(chan *PublishReceipt, 1000),
-		sleepOnIdleInterval:    sleepOnIdleInterval,
-		sleepOnErrorInterval:   sleepOnErrorInterval,
-		publishTimeOutDuration: publishTimeOutDuration,
-		pubLock:                &sync.Mutex{},
-		pubRWLock:              &sync.RWMutex{},
-		autoStarted:            false,
-	}
-}
-
 // Publish sends a single message to the address on the letter using a cached ChannelHost.
 // Subscribe to PublishReceipts to see success and errors.
 //
