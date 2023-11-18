@@ -486,7 +486,7 @@ ProcessLoop:
 	SelectLoop:
 		select {
 		case err := <-rs.centralErr:
-			fmt.Printf("TCR Central Err: %s\r\n", err)
+			fmt.Printf("FRMQ Central Err: %s\r\n", err)
 		default:
 			time.Sleep(rs.monitorSleepInterval)
 			break SelectLoop
