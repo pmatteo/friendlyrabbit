@@ -1,0 +1,81 @@
+name: Perform code analysis and run tests
+
+on:
+  pull_request:
+    types: [synchronize, opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.21"]
+    if: github.event.pull_request.draft == false
+    timeout-minutes: 10
+    steps:
+      - name: Checkout v4
+        uses: actions/checkout@v4
+
+      - name: Go setup v4
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          install-mode: binary
+          version: latest
+          only-new-issues: true
+          working-directory: ./
+          args: --timeout=30m
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.21"]
+    services:
+      rabbitmq:
+        image: rabbitmq:3
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+
+    steps:
+      - name: Checkout v4
+        uses: actions/checkout@v4
+
+      - name: Go setup v4
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+
+      - name: Run tests
+        run: |
+          go test --short -timeout 30s -vet=off -v github.com/pmatteo/friendlyrabbit/tests/unit
+          go test --short -timeout 30s -vet=off -v github.com/pmatteo/friendlyrabbit/tests/integration
