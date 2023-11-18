@@ -14,7 +14,6 @@ type ChannelHost struct {
 	ConnectionID  uint64
 	Ackable       bool
 	CachedChannel bool
-	Confirmations chan amqp.Confirmation
 	Errors        chan *amqp.Error
 	connHost      *ConnectionHost
 	chanLock      *sync.Mutex
@@ -68,36 +67,12 @@ func (ch *ChannelHost) MakeChannel() (err error) {
 		if err != nil {
 			return err
 		}
-
-		ch.Confirmations = make(chan amqp.Confirmation, 100)
-		ch.Channel.NotifyPublish(ch.Confirmations)
 	}
 
 	ch.Errors = make(chan *amqp.Error, 100)
 	ch.Channel.NotifyClose(ch.Errors)
 
 	return nil
-}
-
-// FlushConfirms removes all previous confirmations pending processing.
-func (ch *ChannelHost) FlushConfirms() {
-	ch.chanLock.Lock()
-	defer ch.chanLock.Unlock()
-
-	for {
-		if ch.connHost.Connection.IsClosed() {
-			return
-		}
-
-		// Some weird use case where the Channel is being flooded with confirms after connection disruption
-		// It lead to an infinite loop when this method was called.
-		select {
-		case <-ch.Confirmations:
-			return // return prevents the infinite loop here
-		default:
-			return
-		}
-	}
 }
 
 // PauseForFlowControl allows you to wait and sleep while receiving flow control messages.

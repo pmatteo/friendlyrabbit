@@ -9,6 +9,10 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+const (
+	CONFIRMATION_TIMEOUT = "publish confirmation timeout after %d millisecond recommend retry/requeue (LetterID %s)"
+)
+
 // Publisher contains everything you need to publish a message.
 type Publisher struct {
 	Config                 *RabbitSeasoning
@@ -102,6 +106,7 @@ func (pub *Publisher) Publish(letter *Letter, skipReceipt bool) {
 
 	if !skipReceipt {
 		pub.publishReceipt(letter, err)
+
 	}
 
 	pub.ConnectionPool.ReturnChannel(chanHost, err != nil)
@@ -190,11 +195,9 @@ func (pub *Publisher) PublishWithConfirmation(letter *Letter, timeout time.Durat
 	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-		chanHost.FlushConfirms() // Flush all previous publish confirmations
 
 	Publish:
-		timeoutAfter := time.After(timeout) // timeoutAfter resets everytime we try to publish.
-		err := chanHost.Channel.PublishWithContext(
+		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
 			letter.Envelope.Ctx,
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
@@ -219,29 +222,22 @@ func (pub *Publisher) PublishWithConfirmation(letter *Letter, timeout time.Durat
 		}
 
 		// Wait for very next confirmation on this channel, which should be our confirmation.
-		for {
-			select {
-			case <-timeoutAfter:
-				pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterID: %s wasn't received in a timely manner - recommend retry/requeue", letter.LetterID.String()))
-				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
-				return
-
-			case confirmation := <-chanHost.Confirmations:
-
-				if !confirmation.Ack {
-					goto Publish //nack has occurred, republish
-				}
-
-				// Happy Path, publish was received by server and we didn't timeout client side.
-				pub.publishReceipt(letter, nil)
-				pub.ConnectionPool.ReturnChannel(chanHost, false)
-				return
-
-			default:
-
-				time.Sleep(time.Duration(time.Millisecond * 1)) // limits CPU spin up
-			}
+		if timeout == 0 {
+			timeout = pub.publishTimeOutDuration
 		}
+		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
+		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
+
+		acked, err := dConfirmation.WaitContext(cxt)
+		if err == nil && !acked {
+			cancelFun()
+			goto Publish //nack has occurred, republish
+		}
+
+		cancelFun()
+		pub.ConnectionPool.ReturnChannel(chanHost, err != nil) // not a channel error
+		pub.publishReceipt(letter, err)
+		return
 	}
 }
 
@@ -259,11 +255,9 @@ func (pub *Publisher) PublishWithConfirmationError(letter *Letter, timeout time.
 	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-		chanHost.FlushConfirms() // Flush all previous publish confirmations
 
 	Publish:
-		timeoutAfter := time.After(timeout) // timeoutAfter resets everytime we try to publish.
-		err := chanHost.Channel.PublishWithContext(
+		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
 			letter.Envelope.Ctx,
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
@@ -288,27 +282,21 @@ func (pub *Publisher) PublishWithConfirmationError(letter *Letter, timeout time.
 		}
 
 		// Wait for very next confirmation on this channel, which should be our confirmation.
-		for {
-			select {
-			case <-timeoutAfter:
-				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
-				return fmt.Errorf("publish confirmation for LetterID: %s wasn't received in a timely manner - recommend retry/requeue", letter.LetterID.String())
-
-			case confirmation := <-chanHost.Confirmations:
-
-				if !confirmation.Ack {
-					goto Publish //nack has occurred, republish
-				}
-
-				// Happy Path, publish was received by server and we didn't timeout client side.
-				pub.ConnectionPool.ReturnChannel(chanHost, false)
-				return nil
-
-			default:
-
-				time.Sleep(time.Duration(time.Millisecond * 1)) // limits CPU spin up
-			}
+		if timeout == 0 {
+			timeout = pub.publishTimeOutDuration
 		}
+		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
+		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
+
+		acked, err := dConfirmation.WaitContext(cxt)
+		if err == nil && !acked {
+			cancelFun()
+			goto Publish //nack has occurred, republish
+		}
+
+		cancelFun()
+		pub.ConnectionPool.ReturnChannel(chanHost, err != nil)
+		return nil
 	}
 }
 
@@ -321,10 +309,9 @@ func (pub *Publisher) PublishWithConfirmationContext(ctx context.Context, letter
 	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-		chanHost.FlushConfirms() // Flush all previous publish confirmations
 
 	Publish:
-		err := chanHost.Channel.PublishWithContext(
+		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
 			letter.Envelope.Ctx,
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
@@ -356,9 +343,9 @@ func (pub *Publisher) PublishWithConfirmationContext(ctx context.Context, letter
 				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
 				return
 
-			case confirmation := <-chanHost.Confirmations:
+			case <-dConfirmation.Done():
 
-				if !confirmation.Ack {
+				if !dConfirmation.Acked() {
 					goto Publish //nack has occurred, republish
 				}
 
@@ -384,10 +371,9 @@ func (pub *Publisher) PublishWithConfirmationContextError(ctx context.Context, l
 	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-		chanHost.FlushConfirms() // Flush all previous publish confirmations
 
 	Publish:
-		err := chanHost.Channel.PublishWithContext(
+		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
 			letter.Envelope.Ctx,
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
@@ -418,9 +404,9 @@ func (pub *Publisher) PublishWithConfirmationContextError(ctx context.Context, l
 				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
 				return fmt.Errorf("publish confirmation for LetterID: %s wasn't received before context expired - recommend retry/requeue", letter.LetterID.String())
 
-			case confirmation := <-chanHost.Confirmations:
+			case <-dConfirmation.Done():
 
-				if !confirmation.Ack {
+				if !dConfirmation.Acked() {
 					goto Publish //nack has occurred, republish
 				}
 
@@ -444,19 +430,12 @@ func (pub *Publisher) PublishWithConfirmationContextError(ctx context.Context, l
 // A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
 func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout time.Duration) {
 
-	if timeout == 0 {
-		timeout = pub.publishTimeOutDuration
-	}
-
 	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		channel := pub.ConnectionPool.GetTransientChannel(true)
-		confirms := make(chan amqp.Confirmation, 1)
-		channel.NotifyPublish(confirms)
 
 	Publish:
-		timeoutAfter := time.After(timeout)
-		err := channel.PublishWithContext(
+		dConfirmation, err := channel.PublishWithDeferredConfirmWithContext(
 			letter.Envelope.Ctx,
 			letter.Envelope.Exchange,
 			letter.Envelope.RoutingKey,
@@ -484,29 +463,24 @@ func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout t
 		}
 
 		// Wait for very next confirmation on this channel, which should be our confirmation.
-		for {
-			select {
-			case <-timeoutAfter:
-				pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterID: %s wasn't received in a timely manner (%dms) - recommend retry/requeue", letter.LetterID.String(), timeout))
-				channel.Close()
-				return
-
-			case confirmation := <-confirms:
-
-				if !confirmation.Ack {
-					goto Publish //nack has occurred, republish
-				}
-
-				// Happy Path, publish was received by server and we didn't timeout client side.
-				pub.publishReceipt(letter, nil)
-				channel.Close()
-				return
-
-			default:
-
-				time.Sleep(time.Duration(time.Millisecond * 4)) // limits CPU spin up
-			}
+		if timeout == 0 {
+			timeout = pub.publishTimeOutDuration
 		}
+		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
+
+		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
+
+		acked, err := dConfirmation.WaitContext(cxt)
+		if err == nil && !acked {
+			cancelFun()
+			goto Publish //nack has occurred, republish
+		}
+
+		cancelFun()
+		pub.publishReceipt(letter, err)
+		channel.Close()
+
+		return
 	}
 }
 

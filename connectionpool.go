@@ -221,8 +221,6 @@ func (cp *ConnectionPool) ReturnChannel(chanHost *ChannelHost, erred bool) {
 	if chanHost.CachedChannel {
 		if erred {
 			cp.reconnectChannel(chanHost) // <- blocking operation
-		} else {
-			chanHost.FlushConfirms()
 		}
 
 		cp.channels <- chanHost
