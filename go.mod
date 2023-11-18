@@ -10,7 +10,7 @@ require (
 	github.com/klauspost/compress v1.17.3
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 )
 
