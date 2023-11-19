@@ -158,19 +158,9 @@ func (rs *RabbitService) PublishWithConfirmation(
 		return errors.New("can't have a nil body or an empty exchangename with empty routing key")
 	}
 
-	var letterID = uuid.New()
-	var data []byte
-	var err error
-	if wrapPayload {
-		data, err = CreateWrappedPayload(input, letterID, metadata, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
-	} else {
-		data, err = CreatePayload(input, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
+	letterID, data, err := rs.createPayload(wrapPayload, input, metadata)
+	if err != nil {
+		return err
 	}
 
 	// Non-Transient Has A Bug For Now
@@ -210,27 +200,17 @@ func (rs *RabbitService) Publish(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
-	var letterID = uuid.New()
-	var data []byte
-	var err error
-	if wrapPayload {
-		data, err = CreateWrappedPayload(input, letterID, metadata, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
-	} else {
-		data, err = CreatePayload(input, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
+	letterID, data, err := rs.createPayload(wrapPayload, input, metadata)
+	if err != nil {
+		return err
 	}
 
-	rs.Publisher.Publish(
+	return rs.Publisher.Publish(
 		&Letter{
 			LetterID: letterID,
 			Body:     data,
 			Envelope: &Envelope{
-				Ctx:          context.Background(),
+				Ctx:          ctx,
 				Exchange:     exchangeName,
 				RoutingKey:   routingKey,
 				ContentType:  "application/json",
@@ -240,8 +220,31 @@ func (rs *RabbitService) Publish(
 			},
 		},
 		false)
+}
 
-	return nil
+func (rs *RabbitService) createPayload(
+	wrapPayload bool,
+	input interface{},
+	metadata string,
+) (uuid.UUID, []byte, error) {
+
+	var letterID = uuid.New()
+	var data []byte
+	var err error
+
+	if wrapPayload {
+		data, err = CreateWrappedPayload(input, letterID, metadata, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
+		if err != nil {
+			return uuid.Nil, nil, err
+		}
+	} else {
+		data, err = CreatePayload(input, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
+		if err != nil {
+			return uuid.Nil, nil, err
+		}
+	}
+
+	return letterID, data, nil
 }
 
 // PublishData tries to publish.
