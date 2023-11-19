@@ -52,11 +52,13 @@ func NewPublisherFromConfig(conf *RabbitSeasoning, cp *ConnectionPool) *Publishe
 	}
 }
 
-// Publish sends a single message to the address on the letter using a cached ChannelHost.
-// Subscribe to PublishReceipts to see success and errors.
+// Publish sends a single message to the address on the letter using a
+// cached ChannelHost.
+// Subscribe to PublishReceipts to see success and errors or read the
+// function output.
 //
 // For proper resilience (at least once delivery guarantee over shaky network) use PublishWithConfirmation
-func (pub *Publisher) Publish(letter *Letter, skipReceipt bool) {
+func (pub *Publisher) Publish(letter *Letter, receipt bool) error {
 
 	chanHost := pub.ConnectionPool.GetChannelFromPool()
 
@@ -80,42 +82,7 @@ func (pub *Publisher) Publish(letter *Letter, skipReceipt bool) {
 		},
 	)
 
-	if !skipReceipt {
-		pub.publishReceipt(letter, err)
-
-	}
-
-	pub.ConnectionPool.ReturnChannel(chanHost, err != nil)
-}
-
-// PublishWithError sends a single message to the address on the letter using a cached ChannelHost.
-//
-// For proper resilience (at least once delivery guarantee over shaky network) use PublishWithConfirmation
-func (pub *Publisher) PublishWithError(letter *Letter, skipReceipt bool) error {
-
-	chanHost := pub.ConnectionPool.GetChannelFromPool()
-
-	err := chanHost.Channel.PublishWithContext(
-		letter.Envelope.Ctx,
-		letter.Envelope.Exchange,
-		letter.Envelope.RoutingKey,
-		letter.Envelope.Mandatory,
-		letter.Envelope.Immediate,
-		amqp.Publishing{
-			ContentType:   letter.Envelope.ContentType,
-			Body:          letter.Body,
-			Headers:       letter.Envelope.Headers,
-			DeliveryMode:  letter.Envelope.DeliveryMode,
-			Priority:      letter.Envelope.Priority,
-			MessageId:     letter.LetterID.String(),
-			CorrelationId: letter.Envelope.CorrelationID,
-			Type:          letter.Envelope.Type,
-			Timestamp:     time.Now().UTC(),
-			AppId:         pub.ConnectionPool.Config.ApplicationName,
-		},
-	)
-
-	if !skipReceipt {
+	if receipt {
 		pub.publishReceipt(letter, err)
 	}
 
@@ -123,8 +90,12 @@ func (pub *Publisher) PublishWithError(letter *Letter, skipReceipt bool) error {
 	return err
 }
 
-// PublishWithTransient sends a single message to the address on the letter using a transient (new) RabbitMQ channel.
-// Subscribe to PublishReceipts to see success and errors.
+// PublishWithTransient sends a single message to the address on the letter
+// using a transient (new) RabbitMQ channel.
+//
+// Subscribe to PublishReceipts to see success and errors or read the
+// function output.
+//
 // For proper resilience (at least once delivery guarantee over shaky network) use PublishWithConfirmation
 func (pub *Publisher) PublishWithTransient(letter *Letter) error {
 
