@@ -205,21 +205,21 @@ func (rs *RabbitService) Publish(
 		return err
 	}
 
-	return rs.Publisher.Publish(
-		&Letter{
-			LetterID: letterID,
-			Body:     data,
-			Envelope: &Envelope{
-				Ctx:          ctx,
-				Exchange:     exchangeName,
-				RoutingKey:   routingKey,
-				ContentType:  "application/json",
-				Mandatory:    false,
-				Immediate:    false,
-				DeliveryMode: 2,
-			},
+	l := &Letter{
+		LetterID: letterID,
+		Body:     data,
+		Envelope: &Envelope{
+			Ctx:          ctx,
+			Exchange:     exchangeName,
+			RoutingKey:   routingKey,
+			ContentType:  "application/json",
+			Mandatory:    false,
+			Immediate:    false,
+			DeliveryMode: 2,
 		},
-		false)
+	}
+
+	return rs.Publisher.Publish(l, true)
 }
 
 func (rs *RabbitService) createPayload(
@@ -262,24 +262,22 @@ func (rs *RabbitService) PublishData(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
-	rs.Publisher.Publish(
-		&Letter{
-			LetterID: uuid.New(),
-			Body:     data,
-			Envelope: &Envelope{
-				Ctx:          context.Background(),
-				Exchange:     exchangeName,
-				RoutingKey:   routingKey,
-				ContentType:  "application/json",
-				Mandatory:    false,
-				Immediate:    false,
-				DeliveryMode: 2,
-				Headers:      headers,
-			},
+	l := &Letter{
+		LetterID: uuid.New(),
+		Body:     data,
+		Envelope: &Envelope{
+			Ctx:          context.Background(),
+			Exchange:     exchangeName,
+			RoutingKey:   routingKey,
+			ContentType:  "application/json",
+			Mandatory:    false,
+			Immediate:    false,
+			DeliveryMode: 2,
+			Headers:      headers,
 		},
-		false)
+	}
 
-	return nil
+	return rs.Publisher.Publish(l, true)
 }
 
 // PublishLetter wraps around Publisher to simply Publish.
@@ -293,9 +291,7 @@ func (rs *RabbitService) PublishLetter(letter *Letter) error {
 		letter.LetterID = uuid.New()
 	}
 
-	rs.Publisher.Publish(letter, false)
-
-	return nil
+	return rs.Publisher.Publish(letter, true)
 }
 
 // QueueLetter wraps around AutoPublisher to simply QueueLetter.
