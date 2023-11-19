@@ -33,11 +33,12 @@ func TestPublisherPublishWithConfirmationContextWithError(t *testing.T) {
 
 	letter := mock.CreateMockRandomLetter("TestUnitQueue")
 	ctx, cancelFun := context.WithCancel(context.Background())
+	letter.Envelope.Ctx = ctx
 
 	// call function istantly so when publisher try to publish it match the ctx.Done() condition
 	cancelFun()
 
-	e := DefaultPublisher.PublishWithConfirmationContextError(ctx, letter)
+	e := DefaultPublisher.PublishWithConfirmation(letter, DefaultPublisher.PublishTimeout)
 	assert.Error(t, e)
 }
 
@@ -46,10 +47,11 @@ func TestPublisherPublishWithConfirmationContextWithoutError(t *testing.T) {
 
 	letter := mock.CreateMockRandomLetter("TestUnitQueue")
 	ctx, cancelFun := context.WithCancel(context.Background())
+	letter.Envelope.Ctx = ctx
 
 	// call function later when publisher already published
 	defer cancelFun()
 
-	e := DefaultPublisher.PublishWithConfirmationContextError(ctx, letter)
+	e := DefaultPublisher.PublishWithConfirmation(letter, DefaultPublisher.PublishTimeout)
 	assert.NoError(t, e)
 }

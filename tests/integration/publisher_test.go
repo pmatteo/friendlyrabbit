@@ -75,7 +75,8 @@ func TestPublishWithConfirmation(t *testing.T) {
 	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
-	publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+	e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+	assert.NoError(t, e)
 
 WaitLoop:
 	for {
@@ -156,7 +157,8 @@ func TestPublishWithConfirmationAccuracy(t *testing.T) {
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	for i := 0; i < count; i++ {
-		publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+		e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+		assert.NoError(t, e)
 	}
 
 	for ; successCount < count; successCount++ {

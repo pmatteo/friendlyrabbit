@@ -119,7 +119,7 @@ func TestConsumingAfterPublishConfirmationLarge(t *testing.T) {
 	go monitorConsumer(t, timeoutAfter, consumer, count, done2)
 
 	for i := 0; i < count; i++ {
-		publisher.PublishWithConfirmation(letter, 500*time.Millisecond)
+		_ = publisher.PublishWithConfirmation(letter, 500*time.Millisecond)
 	}
 
 	<-done1
@@ -147,7 +147,8 @@ func TestPublishConfirmation(t *testing.T) {
 	go monitorPublish(t, timeoutAfter, publisher, count, done1)
 
 	for i := 0; i < count; i++ {
-		publisher.PublishWithConfirmation(letter, 50*time.Millisecond)
+		e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+		assert.NoError(t, e)
 	}
 
 	<-done1
