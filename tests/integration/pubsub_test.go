@@ -37,7 +37,7 @@ func TestConsumingAfterPublish(t *testing.T) {
 	go monitorConsumer(t, timeoutAfter, consumer, count, done2)
 
 	for i := 0; i < count; i++ {
-		publisher.Publish(letter, false)
+		_ = publisher.Publish(letter, true)
 	}
 
 	<-done1
@@ -78,7 +78,7 @@ func TestConsumingAftersPublishLarge(t *testing.T) {
 	go monitorConsumer(t, timeoutAfter, consumer, count, done2)
 
 	for i := 0; i < count; i++ {
-		publisher.Publish(letter, false)
+		_ = publisher.Publish(letter, false)
 	}
 
 	<-done1

@@ -23,7 +23,7 @@ func TestPublisherPublishWithError(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
 	letter := mock.CreateMockRandomLetter("TestUnitQueue")
-	e := DefaultPublisher.PublishWithError(letter, false)
+	e := DefaultPublisher.Publish(letter, false)
 
 	assert.NoError(t, e)
 }
