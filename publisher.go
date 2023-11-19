@@ -1,7 +1,6 @@
 package friendlyrabbit
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -10,47 +9,46 @@ import (
 )
 
 const (
-	CONFIRMATION_TIMEOUT = "publish confirmation timeout after %d millisecond recommend retry/requeue (LetterID %s)"
+	CONFIRMATION_TIMEOUT = "publish confirmation timeout after %d millisecond - recommend retry/requeue (LetterID %s)"
+	CONFIRMATION_CANCEL  = "publish confirmation not received before context expired - recommend retry/requeue (LetterID %s)"
 )
 
 // Publisher contains everything you need to publish a message.
 type Publisher struct {
-	Config                 *RabbitSeasoning
-	ConnectionPool         *ConnectionPool
-	letters                chan *Letter
-	autoStop               chan bool
-	publishReceipts        chan *PublishReceipt
-	autoStarted            bool
-	autoPublishGroup       *sync.WaitGroup
-	sleepOnIdleInterval    time.Duration
-	sleepOnErrorInterval   time.Duration
-	publishTimeOutDuration time.Duration
-	pubLock                *sync.Mutex
-	pubRWLock              *sync.RWMutex
+	Config           *RabbitSeasoning
+	ConnectionPool   *ConnectionPool
+	letters          chan *Letter
+	autoStop         chan bool
+	publishReceipts  chan *PublishReceipt
+	autoStarted      bool
+	autoPublishGroup *sync.WaitGroup
+	sleepOnIdle      time.Duration
+	sleepOnError     time.Duration
+	PublishTimeout   time.Duration
+	pubLock          *sync.Mutex
+	pubRWLock        *sync.RWMutex
 }
 
 // NewPublisherFromConfig creates and configures a new Publisher.
-func NewPublisherFromConfig(
-	config *RabbitSeasoning,
-	cp *ConnectionPool) *Publisher {
+func NewPublisherFromConfig(conf *RabbitSeasoning, cp *ConnectionPool) *Publisher {
 
-	if config.PublisherConfig.MaxRetryCount == 0 {
-		config.PublisherConfig.MaxRetryCount = 5
+	if conf.PublisherConfig.MaxRetryCount == 0 {
+		conf.PublisherConfig.MaxRetryCount = 5
 	}
 
 	return &Publisher{
-		Config:                 config,
-		ConnectionPool:         cp,
-		letters:                make(chan *Letter, 1000),
-		autoStop:               make(chan bool, 1),
-		autoPublishGroup:       &sync.WaitGroup{},
-		publishReceipts:        make(chan *PublishReceipt, 1000),
-		sleepOnIdleInterval:    time.Duration(config.PublisherConfig.SleepOnIdleInterval) * time.Millisecond,
-		sleepOnErrorInterval:   time.Duration(config.PublisherConfig.SleepOnErrorInterval) * time.Millisecond,
-		publishTimeOutDuration: time.Duration(config.PublisherConfig.PublishTimeOutInterval) * time.Millisecond,
-		pubLock:                &sync.Mutex{},
-		pubRWLock:              &sync.RWMutex{},
-		autoStarted:            false,
+		Config:           conf,
+		ConnectionPool:   cp,
+		letters:          make(chan *Letter, 1000),
+		autoStop:         make(chan bool, 1),
+		autoPublishGroup: &sync.WaitGroup{},
+		publishReceipts:  make(chan *PublishReceipt, 1000),
+		sleepOnIdle:      time.Duration(conf.PublisherConfig.SleepOnIdleInterval) * time.Millisecond,
+		sleepOnError:     time.Duration(conf.PublisherConfig.SleepOnErrorInterval) * time.Millisecond,
+		PublishTimeout:   time.Duration(conf.PublisherConfig.PublishTimeOutInterval) * time.Millisecond,
+		pubLock:          &sync.Mutex{},
+		pubRWLock:        &sync.RWMutex{},
+		autoStarted:      false,
 	}
 }
 
@@ -159,306 +157,136 @@ func (pub *Publisher) PublishWithTransient(letter *Letter) error {
 	)
 }
 
-// PublishWithConfirmation sends a single message to the address on the letter with confirmation capabilities.
+// PublishWithConfirmation sends a single message to the address on the
+// letter with confirmation capabilities.
+// This is an expensive and slow call, use this when delivery confirmation on
+// publish is your highest priority.
 //
-// This is an expensive and slow call - use this when delivery confirmation on publish is your highest priority.
-// A timeout failure drops the letter back in the PublishReceipts.
-// A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
-func (pub *Publisher) PublishWithConfirmation(letter *Letter, timeout time.Duration) {
-
-	if timeout == 0 {
-		timeout = pub.publishTimeOutDuration
-	}
+// A timeout failure drops the letter back in the PublishReceipts. When combined
+// with QueueLetter, it automatically gets requeued for re-publish.
+// A confirmation failure keeps trying to publish until a timeout failure
+// occurs or context got canceled.
+// If a nack occurs, it will republish the letter.
+// It continuously tries to publish the letter until it receives a confirmation or encounters an error.
+//
+// The function returns an error if it fails to publish the letter within the specified timeout.
+func (pub *Publisher) PublishWithConfirmation(letter *Letter, timeout time.Duration) error {
 
 	for {
-		// Has to use an Ackable channel for Publish Confirmations.
-		chanHost := pub.ConnectionPool.GetChannelFromPool()
-
 	Publish:
-		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
-			letter.Envelope.Ctx,
-			letter.Envelope.Exchange,
-			letter.Envelope.RoutingKey,
-			letter.Envelope.Mandatory,
-			letter.Envelope.Immediate,
-			amqp.Publishing{
-				ContentType:   letter.Envelope.ContentType,
-				Body:          letter.Body,
-				Headers:       letter.Envelope.Headers,
-				DeliveryMode:  letter.Envelope.DeliveryMode,
-				Priority:      letter.Envelope.Priority,
-				MessageId:     letter.LetterID.String(),
-				CorrelationId: letter.Envelope.CorrelationID,
-				Type:          letter.Envelope.Type,
-				Timestamp:     time.Now().UTC(),
-				AppId:         pub.ConnectionPool.Config.ApplicationName,
-			},
-		)
-		if err != nil {
-			pub.ConnectionPool.ReturnChannel(chanHost, true)
-			continue // Take it again! From the top!
-		}
-
-		// Wait for very next confirmation on this channel, which should be our confirmation.
-		if timeout == 0 {
-			timeout = pub.publishTimeOutDuration
-		}
-		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
-		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
-
-		acked, err := dConfirmation.WaitContext(cxt)
-		if err == nil && !acked {
-			cancelFun()
-			goto Publish //nack has occurred, republish
-		}
-
-		cancelFun()
-		pub.ConnectionPool.ReturnChannel(chanHost, err != nil) // not a channel error
-		pub.publishReceipt(letter, err)
-		return
-	}
-}
-
-// PublishWithConfirmationError sends a single message to the address on the letter with confirmation capabilities.
-//
-// This is an expensive and slow call - use this when delivery confirmation on publish is your highest priority.
-// A timeout failure drops the letter back in the PublishReceipts.
-// A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
-func (pub *Publisher) PublishWithConfirmationError(letter *Letter, timeout time.Duration) error {
-
-	if timeout == 0 {
-		timeout = pub.publishTimeOutDuration
-	}
-
-	for {
-		// Has to use an Ackable channel for Publish Confirmations.
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-
-	Publish:
-		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
-			letter.Envelope.Ctx,
-			letter.Envelope.Exchange,
-			letter.Envelope.RoutingKey,
-			letter.Envelope.Mandatory,
-			letter.Envelope.Immediate,
-			amqp.Publishing{
-				ContentType:   letter.Envelope.ContentType,
-				Body:          letter.Body,
-				Headers:       letter.Envelope.Headers,
-				DeliveryMode:  letter.Envelope.DeliveryMode,
-				Priority:      letter.Envelope.Priority,
-				MessageId:     letter.LetterID.String(),
-				CorrelationId: letter.Envelope.CorrelationID,
-				Type:          letter.Envelope.Type,
-				Timestamp:     time.Now().UTC(),
-				AppId:         pub.ConnectionPool.Config.ApplicationName,
-			},
-		)
-		if err != nil {
-			pub.ConnectionPool.ReturnChannel(chanHost, true)
-			continue // Take it again! From the top!
-		}
-
-		// Wait for very next confirmation on this channel, which should be our confirmation.
-		if timeout == 0 {
-			timeout = pub.publishTimeOutDuration
-		}
-		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
-		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
-
-		acked, err := dConfirmation.WaitContext(cxt)
-		if err == nil && !acked {
-			cancelFun()
-			goto Publish //nack has occurred, republish
-		}
-
-		cancelFun()
+		dConfirmation, err := pub.publishDeferredConfirm(chanHost.Channel, letter)
 		pub.ConnectionPool.ReturnChannel(chanHost, err != nil)
-		return nil
-	}
-}
 
-// PublishWithConfirmationContext sends a single message to the address on the letter with confirmation capabilities.
-// This is an expensive and slow call - use this when delivery confirmation on publish is your highest priority.
-// A timeout failure drops the letter back in the PublishReceipts.
-// A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
-func (pub *Publisher) PublishWithConfirmationContext(ctx context.Context, letter *Letter) {
-
-	for {
-		// Has to use an Ackable channel for Publish Confirmations.
-		chanHost := pub.ConnectionPool.GetChannelFromPool()
-
-	Publish:
-		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
-			letter.Envelope.Ctx,
-			letter.Envelope.Exchange,
-			letter.Envelope.RoutingKey,
-			letter.Envelope.Mandatory,
-			letter.Envelope.Immediate,
-			amqp.Publishing{
-				ContentType:   letter.Envelope.ContentType,
-				Body:          letter.Body,
-				Headers:       letter.Envelope.Headers,
-				DeliveryMode:  letter.Envelope.DeliveryMode,
-				Priority:      letter.Envelope.Priority,
-				MessageId:     letter.LetterID.String(),
-				CorrelationId: letter.Envelope.CorrelationID,
-				Type:          letter.Envelope.Type,
-				Timestamp:     time.Now().UTC(),
-				AppId:         pub.ConnectionPool.Config.ApplicationName,
-			},
-		)
 		if err != nil {
-			pub.ConnectionPool.ReturnChannel(chanHost, true)
-			continue // Take it again! From the top!
+			if pub.sleepOnError > 0 {
+				time.Sleep(pub.sleepOnError)
+			}
+			continue
 		}
 
 		// Wait for very next confirmation on this channel, which should be our confirmation.
-		for {
-			select {
-			case <-ctx.Done():
-				pub.publishReceipt(letter, fmt.Errorf("publish confirmation for LetterID: %s wasn't received before context expired - recommend retry/requeue", letter.LetterID.String()))
-				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
-				return
-
-			case <-dConfirmation.Done():
-
-				if !dConfirmation.Acked() {
-					goto Publish //nack has occurred, republish
-				}
-
-				// Happy Path, publish was received by server and we didn't timeout client side.
-				pub.publishReceipt(letter, nil)
-				pub.ConnectionPool.ReturnChannel(chanHost, false)
-				return
-
-			default:
-
-				time.Sleep(time.Duration(time.Millisecond * 1)) // limits CPU spin up
-			}
+		acked, err := waitPublishConfirmation(dConfirmation, letter, timeout)
+		if !acked && err == nil {
+			goto Publish //nack has occurred, republish
 		}
+
+		pub.publishReceipt(letter, err)
+		return err
 	}
 }
 
-// PublishWithConfirmationContextError sends a single message to the address on the letter with confirmation capabilities.
-// This is an expensive and slow call - use this when delivery confirmation on publish is your highest priority.
-// A timeout failure drops the letter back in the PublishReceipts.
-// A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
-func (pub *Publisher) PublishWithConfirmationContextError(ctx context.Context, letter *Letter) error {
+// PublishWithConfirmationTransient sends a single message to the address on
+// the letter with confirmation capabilities on transient Channels.
+// This is an expensive and slow call - use this when delivery confirmation
+// on publish is your highest priority.
+//
+// A timeout failure drops the letter back in the PublishReceipts. When
+// combined with QueueLetter, it automatically gets requeued for re-publish.
+// A confirmation failure keeps trying to publish until a timeout failure
+// occurs or context got canceled.
+// If a nack occurs, it will republish the letter.
+// It continuously tries to publish the letter until it receives a confirmation or encounters an error.
+//
+// The function returns an error if it fails to publish the letter within the specified timeout.
+func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout time.Duration) error {
 
 	for {
-		// Has to use an Ackable channel for Publish Confirmations.
-		chanHost := pub.ConnectionPool.GetChannelFromPool()
-
 	Publish:
-		dConfirmation, err := chanHost.Channel.PublishWithDeferredConfirmWithContext(
-			letter.Envelope.Ctx,
-			letter.Envelope.Exchange,
-			letter.Envelope.RoutingKey,
-			letter.Envelope.Mandatory,
-			letter.Envelope.Immediate,
-			amqp.Publishing{
-				ContentType:   letter.Envelope.ContentType,
-				Body:          letter.Body,
-				Headers:       letter.Envelope.Headers,
-				DeliveryMode:  letter.Envelope.DeliveryMode,
-				Priority:      letter.Envelope.Priority,
-				MessageId:     letter.LetterID.String(),
-				CorrelationId: letter.Envelope.CorrelationID,
-				Type:          letter.Envelope.Type,
-				Timestamp:     time.Now().UTC(),
-				AppId:         pub.ConnectionPool.Config.ApplicationName,
-			},
-		)
-		if err != nil {
-			pub.ConnectionPool.ReturnChannel(chanHost, true)
-			continue // Take it again! From the top!
-		}
-
-		// Wait for very next confirmation on this channel, which should be our confirmation.
-		for {
-			select {
-			case <-ctx.Done():
-				pub.ConnectionPool.ReturnChannel(chanHost, false) // not a channel error
-				return fmt.Errorf("publish confirmation for LetterID: %s wasn't received before context expired - recommend retry/requeue", letter.LetterID.String())
-
-			case <-dConfirmation.Done():
-
-				if !dConfirmation.Acked() {
-					goto Publish //nack has occurred, republish
-				}
-
-				pub.ConnectionPool.ReturnChannel(chanHost, false)
-				return nil
-
-			default:
-
-				time.Sleep(time.Duration(time.Millisecond * 1)) // limits CPU spin up
-			}
-		}
-	}
-}
-
-// PublishWithConfirmationTransient sends a single message to the address on the letter with confirmation capabilities on transient Channels.
-// This is an expensive and slow call - use this when delivery confirmation on publish is your highest priority.
-// A timeout failure drops the letter back in the PublishReceipts. When combined with QueueLetter, it automatically
-//
-//	gets requeued for re-publish.
-//
-// A confirmation failure keeps trying to publish (at least until timeout failure occurs.)
-func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout time.Duration) {
-
-	for {
 		// Has to use an Ackable channel for Publish Confirmations.
 		channel := pub.ConnectionPool.GetTransientChannel(true)
+		dConfirmation, err := pub.publishDeferredConfirm(channel, letter)
+		channel.Close()
 
-	Publish:
-		dConfirmation, err := channel.PublishWithDeferredConfirmWithContext(
-			letter.Envelope.Ctx,
-			letter.Envelope.Exchange,
-			letter.Envelope.RoutingKey,
-			letter.Envelope.Mandatory,
-			letter.Envelope.Immediate,
-			amqp.Publishing{
-				ContentType:   letter.Envelope.ContentType,
-				Body:          letter.Body,
-				Headers:       letter.Envelope.Headers,
-				DeliveryMode:  letter.Envelope.DeliveryMode,
-				Priority:      letter.Envelope.Priority,
-				MessageId:     letter.LetterID.String(),
-				CorrelationId: letter.Envelope.CorrelationID,
-				Type:          letter.Envelope.Type,
-				Timestamp:     time.Now().UTC(),
-				AppId:         pub.ConnectionPool.Config.ApplicationName,
-			},
-		)
 		if err != nil {
-			channel.Close()
-			if pub.sleepOnErrorInterval < 0 {
-				time.Sleep(pub.sleepOnErrorInterval)
+			if pub.sleepOnError > 0 {
+				time.Sleep(pub.sleepOnError)
 			}
-			continue // Take it again! From the top!
+			continue
 		}
 
 		// Wait for very next confirmation on this channel, which should be our confirmation.
-		if timeout == 0 {
-			timeout = pub.publishTimeOutDuration
-		}
-		timeoutErr := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
-
-		cxt, cancelFun := context.WithTimeoutCause(letter.Envelope.Ctx, timeout, timeoutErr)
-
-		acked, err := dConfirmation.WaitContext(cxt)
-		if err == nil && !acked {
-			cancelFun()
+		acked, err := waitPublishConfirmation(dConfirmation, letter, timeout)
+		if !acked && err == nil {
 			goto Publish //nack has occurred, republish
 		}
 
-		cancelFun()
 		pub.publishReceipt(letter, err)
-		channel.Close()
+		return err
+	}
+}
 
-		return
+// publishDeferredConfirm publishes a letter with deferred confirmation.
+//
+// It sends the letter to the specified exchange and routing key using the provided channel.
+// The letter's envelope properties are used to set the message properties.
+//
+// Returns the deferred confirmation and any error encountered during publishing.
+func (pub *Publisher) publishDeferredConfirm(c *amqp.Channel, letter *Letter) (*amqp.DeferredConfirmation, error) {
+	dConfirmation, err := c.PublishWithDeferredConfirmWithContext(
+		letter.Envelope.Ctx,
+		letter.Envelope.Exchange,
+		letter.Envelope.RoutingKey,
+		letter.Envelope.Mandatory,
+		letter.Envelope.Immediate,
+		amqp.Publishing{
+			ContentType:   letter.Envelope.ContentType,
+			Body:          letter.Body,
+			Headers:       letter.Envelope.Headers,
+			DeliveryMode:  letter.Envelope.DeliveryMode,
+			Priority:      letter.Envelope.Priority,
+			MessageId:     letter.LetterID.String(),
+			CorrelationId: letter.Envelope.CorrelationID,
+			Type:          letter.Envelope.Type,
+			Timestamp:     time.Now().UTC(),
+			AppId:         pub.ConnectionPool.Config.ApplicationName,
+		},
+	)
+
+	return dConfirmation, err
+}
+
+// waitPublishConfirmation waits for the confirmation of a published letter on the given channel.
+//
+// It returns true if the confirmation is received within the specified timeout, otherwise it returns false.
+// If the context of the letter's envelope is canceled, it returns an error with the cancellation reason.
+// If the confirmation times out, it returns an error with the timeout duration and the letter ID.
+// If the confirmation is received, it returns the acknowledgment status and no error.
+func waitPublishConfirmation(dConf *amqp.DeferredConfirmation, letter *Letter, timeout time.Duration) (bool, error) {
+	// Wait for very next confirmation on this channel, which should be our confirmation.
+	for {
+		select {
+		case <-letter.Envelope.Ctx.Done():
+			err := fmt.Errorf(CONFIRMATION_CANCEL, letter.LetterID.String())
+			return false, err
+
+		case <-time.After(timeout):
+			err := fmt.Errorf(CONFIRMATION_TIMEOUT, timeout.Milliseconds(), letter.LetterID.String())
+			return false, err
+
+		case <-dConf.Done():
+			return dConf.Acked(), nil
+		}
 	}
 }
 
@@ -521,14 +349,14 @@ func (pub *Publisher) deliverLetters() bool {
 
 				parallelPublishSemaphore <- struct{}{}
 				go func(letter *Letter) {
-					pub.PublishWithConfirmation(letter, pub.publishTimeOutDuration)
+					_ = pub.PublishWithConfirmation(letter, pub.PublishTimeout)
 					<-parallelPublishSemaphore
 				}(letter)
 
 			default:
 
-				if pub.sleepOnIdleInterval > 0 {
-					time.Sleep(pub.sleepOnIdleInterval)
+				if pub.sleepOnIdle > 0 {
+					time.Sleep(pub.sleepOnIdle)
 				}
 				break PublishLoop
 

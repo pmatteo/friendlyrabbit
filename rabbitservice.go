@@ -175,7 +175,7 @@ func (rs *RabbitService) PublishWithConfirmation(
 
 	// Non-Transient Has A Bug For Now
 	// https://github.com/streadway/amqp/issues/459
-	rs.Publisher.PublishWithConfirmationTransient(
+	return rs.Publisher.PublishWithConfirmationTransient(
 		&Letter{
 			LetterID: letterID,
 			Body:     data,
@@ -191,8 +191,6 @@ func (rs *RabbitService) PublishWithConfirmation(
 			},
 		},
 		time.Duration(time.Millisecond*300))
-
-	return nil
 }
 
 // Publish tries to publish directly without retry and data optionally wrapped in a ModdedLetter.
