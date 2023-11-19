@@ -158,24 +158,14 @@ func (rs *RabbitService) PublishWithConfirmation(
 		return errors.New("can't have a nil body or an empty exchangename with empty routing key")
 	}
 
-	var letterID = uuid.New()
-	var data []byte
-	var err error
-	if wrapPayload {
-		data, err = CreateWrappedPayload(input, letterID, metadata, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
-	} else {
-		data, err = CreatePayload(input, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
-		if err != nil {
-			return err
-		}
+	letterID, data, err := rs.createPayload(wrapPayload, input, metadata)
+	if err != nil {
+		return err
 	}
 
 	// Non-Transient Has A Bug For Now
 	// https://github.com/streadway/amqp/issues/459
-	rs.Publisher.PublishWithConfirmationTransient(
+	return rs.Publisher.PublishWithConfirmationTransient(
 		&Letter{
 			LetterID: letterID,
 			Body:     data,
@@ -191,8 +181,6 @@ func (rs *RabbitService) PublishWithConfirmation(
 			},
 		},
 		time.Duration(time.Millisecond*300))
-
-	return nil
 }
 
 // Publish tries to publish directly without retry and data optionally wrapped in a ModdedLetter.
@@ -212,38 +200,51 @@ func (rs *RabbitService) Publish(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
+	letterID, data, err := rs.createPayload(wrapPayload, input, metadata)
+	if err != nil {
+		return err
+	}
+
+	l := &Letter{
+		LetterID: letterID,
+		Body:     data,
+		Envelope: &Envelope{
+			Ctx:          ctx,
+			Exchange:     exchangeName,
+			RoutingKey:   routingKey,
+			ContentType:  "application/json",
+			Mandatory:    false,
+			Immediate:    false,
+			DeliveryMode: 2,
+		},
+	}
+
+	return rs.Publisher.Publish(l, true)
+}
+
+func (rs *RabbitService) createPayload(
+	wrapPayload bool,
+	input interface{},
+	metadata string,
+) (uuid.UUID, []byte, error) {
+
 	var letterID = uuid.New()
 	var data []byte
 	var err error
+
 	if wrapPayload {
 		data, err = CreateWrappedPayload(input, letterID, metadata, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
 		if err != nil {
-			return err
+			return uuid.Nil, nil, err
 		}
 	} else {
 		data, err = CreatePayload(input, rs.Config.CompressionConfig, rs.Config.EncryptionConfig)
 		if err != nil {
-			return err
+			return uuid.Nil, nil, err
 		}
 	}
 
-	rs.Publisher.Publish(
-		&Letter{
-			LetterID: letterID,
-			Body:     data,
-			Envelope: &Envelope{
-				Ctx:          context.Background(),
-				Exchange:     exchangeName,
-				RoutingKey:   routingKey,
-				ContentType:  "application/json",
-				Mandatory:    false,
-				Immediate:    false,
-				DeliveryMode: 2,
-			},
-		},
-		false)
-
-	return nil
+	return letterID, data, nil
 }
 
 // PublishData tries to publish.
@@ -261,24 +262,22 @@ func (rs *RabbitService) PublishData(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
-	rs.Publisher.Publish(
-		&Letter{
-			LetterID: uuid.New(),
-			Body:     data,
-			Envelope: &Envelope{
-				Ctx:          context.Background(),
-				Exchange:     exchangeName,
-				RoutingKey:   routingKey,
-				ContentType:  "application/json",
-				Mandatory:    false,
-				Immediate:    false,
-				DeliveryMode: 2,
-				Headers:      headers,
-			},
+	l := &Letter{
+		LetterID: uuid.New(),
+		Body:     data,
+		Envelope: &Envelope{
+			Ctx:          context.Background(),
+			Exchange:     exchangeName,
+			RoutingKey:   routingKey,
+			ContentType:  "application/json",
+			Mandatory:    false,
+			Immediate:    false,
+			DeliveryMode: 2,
+			Headers:      headers,
 		},
-		false)
+	}
 
-	return nil
+	return rs.Publisher.Publish(l, true)
 }
 
 // PublishLetter wraps around Publisher to simply Publish.
@@ -292,9 +291,7 @@ func (rs *RabbitService) PublishLetter(letter *Letter) error {
 		letter.LetterID = uuid.New()
 	}
 
-	rs.Publisher.Publish(letter, false)
-
-	return nil
+	return rs.Publisher.Publish(letter, true)
 }
 
 // QueueLetter wraps around AutoPublisher to simply QueueLetter.

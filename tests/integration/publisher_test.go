@@ -53,7 +53,7 @@ func TestPublishAndWaitForReceipt(t *testing.T) {
 	assert.NotNil(t, publisher)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
-	publisher.Publish(letter, false)
+	_ = publisher.Publish(letter, true)
 
 WaitLoop:
 	for {
@@ -75,7 +75,8 @@ func TestPublishWithConfirmation(t *testing.T) {
 	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
-	publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+	e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+	assert.NoError(t, e)
 
 WaitLoop:
 	for {
@@ -102,11 +103,11 @@ func TestPublishAccuracy(t *testing.T) {
 	}
 
 	t1 := time.Now()
-	fmt.Printf("Benchmark Starts: %s\r\n", t1)
+	fmt.Printf("TestPublishAccuracy Starts: %s\r\n", t1)
 	defer func() {
 		t2 := time.Now()
 		diff := t2.Sub(t1)
-		fmt.Printf("Benchmark End: %s\r\n", t2)
+		fmt.Printf("TestPublishAccuracy End: %s\r\n", t2)
 		fmt.Printf("Messages: %f msg/s\r\n", float64(count)/diff.Seconds())
 	}()
 
@@ -115,7 +116,7 @@ func TestPublishAccuracy(t *testing.T) {
 	letter.Envelope.DeliveryMode = amqp.Transient
 
 	for i := 0; i < count; i++ {
-		publisher.Publish(letter, false)
+		_ = publisher.Publish(letter, true)
 	}
 
 	for ; successCount < count; successCount++ {
@@ -140,11 +141,11 @@ func TestPublishWithConfirmationAccuracy(t *testing.T) {
 	t.Log(count)
 
 	t1 := time.Now()
-	fmt.Printf("Benchmark Starts: %s\r\n", t1)
+	fmt.Printf("TestPublishWithConfirmationAccuracy Starts: %s\r\n", t1)
 	defer func() {
 		t2 := time.Now()
 		diff := t2.Sub(t1)
-		fmt.Printf("Benchmark End: %s\r\n", t2)
+		fmt.Printf("TestPublishWithConfirmationAccuracy End: %s\r\n", t2)
 		fmt.Printf("Messages: %f msg/s\r\n", float64(count)/diff.Seconds())
 	}()
 
@@ -156,7 +157,8 @@ func TestPublishWithConfirmationAccuracy(t *testing.T) {
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	for i := 0; i < count; i++ {
-		publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+		e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
+		assert.NoError(t, e)
 	}
 
 	for ; successCount < count; successCount++ {

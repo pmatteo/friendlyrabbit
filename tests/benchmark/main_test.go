@@ -129,7 +129,7 @@ PublishLoop:
 		default:
 			newLetter := mock.CreateMockRandomWrappedBodyLetter("TestBenchmarkQueue")
 			conMap.Set(newLetter.LetterID.String(), false)
-			publisher.PublishWithConfirmation(newLetter, time.Second)
+			_ = publisher.PublishWithConfirmation(newLetter, time.Second)
 
 			notice := <-publisher.PublishReceipts()
 			if notice.Success {
