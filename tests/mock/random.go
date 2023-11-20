@@ -60,6 +60,12 @@ func RandomString(size int) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
+// RandomString creates a new RandomSource to generate a RandomString unique per nanosecond.
+func RandomNumber(max int) int {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return r.Intn(max)
+}
+
 // RandomBytes returns a RandomString converted to bytes.
 func RandomBytes(size int) []byte {
 	return []byte(RandomStringFromSource(size, mockRandomSource))
