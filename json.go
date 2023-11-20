@@ -52,7 +52,7 @@ func CreatePayload(
 	}
 
 	buffer := &bytes.Buffer{}
-	if compressionConf.Enabled {
+	if compressionConf != nil && compressionConf.Enabled {
 		err := compression.Compress(compressionConf.Type, data, buffer)
 		if err != nil {
 			return nil, err
@@ -62,7 +62,7 @@ func CreatePayload(
 		data = buffer.Bytes()
 	}
 
-	if encryptionConf.Enabled {
+	if encryptionConf != nil && encryptionConf.Enabled {
 		err := crypto.Encrypt(encryptionConf.Type, encryptionConf.Hashkey, data, buffer)
 		if err != nil {
 			return nil, err
