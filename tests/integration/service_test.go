@@ -1,7 +1,6 @@
 package integration_tests
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -61,13 +60,12 @@ func TestPublishWithHeaderAndVerify(t *testing.T) {
 
 	delivery, err := consumer.Get("TestIntegrationQueue")
 	assert.NoError(t, err)
+	assert.NotNil(t, delivery)
 
-	if delivery != nil {
-		testHeader, ok := delivery.Headers["x-fr-testheader"]
-		assert.True(t, ok)
-
-		fmt.Printf("Header Received: %s\r\n", testHeader.(string))
-	}
+	testHeader, ok := delivery.Headers["x-testheader"]
+	assert.True(t, ok)
+	assert.NotNil(t, testHeader)
+	assert.Equal(t, "HelloWorldHeader", testHeader.(string))
 }
 
 // TestPublishWithHeaderAndConsumerReceivedHeader verifies headers are being consumed into ReceivedData.
@@ -89,7 +87,7 @@ func TestPublishWithHeaderAndConsumerReceivedHeader(t *testing.T) {
 
 	data := <-consumer.ReceivedMessages()
 
-	testHeader, ok := data.Delivery.Headers["x-fr-testheader"]
+	testHeader, ok := data.Delivery.Headers["x-testheader"]
 	assert.True(t, ok)
 
 	t.Logf("Header Received: %s\r\n", testHeader.(string))

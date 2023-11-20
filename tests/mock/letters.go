@@ -2,13 +2,11 @@ package mock
 
 import (
 	"context"
-	"encoding/json"
 	"math/rand"
 	"time"
 
 	"github.com/google/uuid"
 	fr "github.com/pmatteo/friendlyrabbit"
-	utils_json "github.com/pmatteo/friendlyrabbit/internal/utils/json"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -22,20 +20,8 @@ func CreateMockLetter(exchangeName string, routingKey string, body []byte) *fr.L
 		body = []byte("\x68\x65\x6c\x6c\x6f\x20\x77\x6f\x72\x6c\x64")
 	}
 
-	envelope := &fr.Envelope{
-		Ctx:          context.Background(),
-		Exchange:     exchangeName,
-		RoutingKey:   routingKey,
-		ContentType:  "application/json",
-		DeliveryMode: 2,
-	}
-
-	return &fr.Letter{
-		LetterID:   uuid.New(),
-		RetryCount: uint32(3),
-		Body:       body,
-		Envelope:   envelope,
-	}
+	e := fr.NewEnvelope(context.Background(), exchangeName, routingKey, nil)
+	return fr.NewLetter(uuid.New(), e, body)
 }
 
 // CreateMockRandomLetter creates a mock letter for publishing with random sizes and random Ids.
@@ -43,56 +29,31 @@ func CreateMockRandomLetter(routingKey string) *fr.Letter {
 
 	body := RandomBytes(mockRandom.Intn(randomMax-randomMin) + randomMin)
 
-	envelope := &fr.Envelope{
-		Ctx:          context.Background(),
-		Exchange:     "",
-		RoutingKey:   routingKey,
-		ContentType:  "application/json",
-		DeliveryMode: 2,
-		Headers:      make(amqp.Table),
-	}
+	env := fr.NewEnvelope(context.Background(), "", routingKey, amqp.Table{
+		"x-testheader": "HelloWorldHeader",
+	})
 
-	envelope.Headers["x-fr-testheader"] = "HelloWorldHeader"
+	return fr.NewLetter(uuid.New(), env, body)
+}
 
-	return &fr.Letter{
-		LetterID:   uuid.New(),
-		RetryCount: uint32(0),
-		Body:       body,
-		Envelope:   envelope,
-	}
+type BasicStruct struct {
+	N int
+	S string
 }
 
 // CreateMockRandomWrappedBodyLetter creates a mock fr.Letter for publishing with random sizes and random Ids.
 func CreateMockRandomWrappedBodyLetter(routingKey string) *fr.Letter {
-
-	body := RandomBytes(mockRandom.Intn(randomMax-randomMin) + randomMin)
-
-	envelope := &fr.Envelope{
-		Ctx:          context.Background(),
-		Exchange:     "",
-		RoutingKey:   routingKey,
-		ContentType:  "application/json",
-		DeliveryMode: 2,
+	n := RandomNumber(1000)
+	data := &BasicStruct{
+		N: n,
+		S: RepeatedRandomString(n, RandomNumber(10)),
 	}
 
-	wrappedBody := &fr.WrappedBody{
-		LetterID: uuid.New(),
-		Body: &fr.ModdedBody{
-			Encrypted:   false,
-			Compressed:  false,
-			UTCDateTime: utils_json.UtcTimestamp(),
-			Data:        body,
-		},
+	e := fr.NewEnvelope(context.Background(), "", routingKey, nil)
+	l, err := fr.NewLetterWithPayload(e, data, nil, nil, true, "")
+	if err != nil {
+		panic(err)
 	}
 
-	data, _ := json.Marshal(wrappedBody)
-
-	letter := &fr.Letter{
-		LetterID:   wrappedBody.LetterID,
-		RetryCount: uint32(0),
-		Body:       data,
-		Envelope:   envelope,
-	}
-
-	return letter
+	return l
 }

@@ -8,6 +8,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestConnectionPoolCreateWithWrongURI(t *testing.T) {
+	defer leaktest.Check(t)() // Fail on leaked goroutines.
+
+	old := Seasoning.PoolConfig.URI
+	Seasoning.PoolConfig.URI = "amqp://wrong:wrong@localhost:1111/"
+
+	cp, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	assert.Nil(t, cp)
+	assert.Error(t, err)
+
+	Seasoning.PoolConfig.URI = old
+}
+
 func TestConnectionPoolCreateWithZeroConnections(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
