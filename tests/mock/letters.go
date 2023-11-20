@@ -29,19 +29,11 @@ func CreateMockRandomLetter(routingKey string) *fr.Letter {
 
 	body := RandomBytes(mockRandom.Intn(randomMax-randomMin) + randomMin)
 
-	envelope := &fr.Envelope{
-		Ctx:          context.Background(),
-		Exchange:     "",
-		RoutingKey:   routingKey,
-		ContentType:  "application/json",
-		DeliveryMode: 2,
-		Headers:      make(amqp.Table),
-	}
+	env := fr.NewEnvelope(context.Background(), "", routingKey, amqp.Table{
+		"x-testheader": "HelloWorldHeader",
+	})
 
-	envelope.Headers["x-fr-testheader"] = "HelloWorldHeader"
-
-	e := fr.NewEnvelope(context.Background(), "", routingKey, nil)
-	return fr.NewLetter(uuid.New(), e, body)
+	return fr.NewLetter(uuid.New(), env, body)
 }
 
 type BasicStruct struct {
