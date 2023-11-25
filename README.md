@@ -31,7 +31,7 @@ connectionPool, err := friendlyrabbit.NewConnectionPool(poolConfig)
 #### Create a simple Publisher
 
 ```go
-publisher := friendlyrabbit.NewPublisherFromConfig(config, connectionPool)
+publisher := friendlyrabbit.NewPublisher(config, connectionPool)
 
 // Create the letter's Envelope containing all the address details of where a letter is going.
 env := fr.NewEnvelope(context.Background(), exchangeName, routingKey, amqpTableHeader)
@@ -61,7 +61,7 @@ Checkout the wiki for more information about the Publisher.
 #### Create a simple Consumer
 
 ```go
-publisher := friendlyrabbit.NewPublisherFromConfig(config, connectionPool)
+publisher := friendlyrabbit.NewPublisher(config, connectionPool)
 
 // Create the letter's Envelope containing all the address details of where a letter is going.
 env := fr.NewEnvelope(context.Background(), exchangeName, routingKey, amqpTableHeader)
