@@ -22,14 +22,14 @@ func TestConsumingAfterPublish(t *testing.T) {
 	assert.True(t, ok)
 
 	timeoutAfter := time.After(time.Minute * 2)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
 	assert.NotNil(t, consumer)
 
 	done1 := make(chan struct{}, 1)
 	done2 := make(chan struct{}, 1)
-	consumer.StartConsuming()
+	consumer.StartConsuming(nil)
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, connectionPool)
+	publisher := fr.NewPublisher(Seasoning, connectionPool)
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	count := 1000
 
@@ -63,14 +63,14 @@ func TestConsumingAftersPublishLarge(t *testing.T) {
 	assert.True(t, ok)
 
 	timeoutAfter := time.After(time.Minute * 5)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
 	assert.NotNil(t, consumer)
 
 	done1 := make(chan struct{}, 1)
 	done2 := make(chan struct{}, 1)
-	consumer.StartConsuming()
+	consumer.StartConsuming(nil)
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, connectionPool)
+	publisher := fr.NewPublisher(Seasoning, connectionPool)
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	count := 100000
 
@@ -104,14 +104,14 @@ func TestConsumingAfterPublishConfirmationLarge(t *testing.T) {
 	assert.True(t, ok)
 
 	timeoutAfter := time.After(time.Minute * 2)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
 	assert.NotNil(t, consumer)
 
 	done1 := make(chan struct{}, 1)
 	done2 := make(chan struct{}, 1)
-	consumer.StartConsuming()
+	consumer.StartConsuming(nil)
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, connectionPool)
+	publisher := fr.NewPublisher(Seasoning, connectionPool)
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	count := 10000
 
@@ -140,7 +140,7 @@ func TestPublishConfirmation(t *testing.T) {
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, connectionPool)
+	publisher := fr.NewPublisher(Seasoning, connectionPool)
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	count := 100
 

@@ -50,10 +50,10 @@ func BenchmarkPublishAndConsumeMany(b *testing.B) {
 
 	consumerConfig, ok := seasoning.ConsumerConfigs["TurboCookedRabbitConsumer"]
 	assert.True(b, ok)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
-	consumer.StartConsuming()
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
+	consumer.StartConsuming(nil)
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	publisher.StartAutoPublishing()
 	defer publisher.Shutdown(false)
 
@@ -133,13 +133,13 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 
 	b.ReportAllocs()
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	defer publisher.Shutdown(false)
 
 	consumerConfig, ok := seasoning.ConsumerConfigs["TurboCookedRabbitConsumer-Ackable"]
 	assert.True(b, ok)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
-	consumer.StartConsuming()
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
+	consumer.StartConsuming(nil)
 
 	go publishWithConfirmation(b, conMap, publishDone, timeDuration, publisher)
 	go consumeLoop(b, conMap, consumerDone, conTimeoutDuration, publisher, consumer)

@@ -13,7 +13,7 @@ import (
 func TestPublisherCreate(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
+	publisher := fr.NewPublisher(Seasoning, RabbitService.ConnectionPool)
 	assert.NotNil(t, publisher)
 
 	publisher.Shutdown(false)
