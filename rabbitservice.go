@@ -53,7 +53,7 @@ func NewRabbitServiceWithConnectionPool(
 	processPublishReceipts func(*PublishReceipt),
 	processError func(error)) (*RabbitService, error) {
 
-	publisher := NewPublisherFromConfig(config, connectionPool)
+	publisher := NewPublisher(config, connectionPool)
 	return NewRabbitServiceWithPublisher(publisher, config, passphrase, salt, processPublishReceipts, processError)
 }
 
@@ -128,7 +128,7 @@ func (rs *RabbitService) createConsumers(consumerConfigs map[string]*ConsumerCon
 
 	for consumerName, consumerConfig := range consumerConfigs {
 
-		consumer := NewConsumerFromConfig(consumerConfig, rs.ConnectionPool)
+		consumer := NewConsumer(consumerConfig, rs.ConnectionPool)
 		hostName, err := os.Hostname()
 
 		if err == nil {

@@ -32,8 +32,8 @@ type Consumer struct {
 	conLock              *sync.Mutex
 }
 
-// NewConsumerFromConfig creates a new Consumer to receive messages from a specific queuename.
-func NewConsumerFromConfig(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
+// NewConsumer creates a new Consumer to receive messages from a specific queuename.
+func NewConsumer(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
 
 	return &Consumer{
 		Config:               config,
@@ -54,49 +54,6 @@ func NewConsumerFromConfig(config *ConsumerConfig, cp *ConnectionPool) *Consumer
 		qosCountOverride:     config.QosCountOverride,
 		conLock:              &sync.Mutex{},
 	}
-}
-
-// NewConsumer creates a new Consumer to receive messages from a specific queuename.
-func NewConsumer(
-	rconfig *RabbitSeasoning,
-	cp *ConnectionPool,
-	queuename string,
-	consumerName string,
-	autoAck bool,
-	exclusive bool,
-	noWait bool,
-	args map[string]interface{},
-	qosCountOverride int, // if zero ignored
-	sleepOnErrorInterval uint32,
-	sleepOnIdleInterval uint32) (*Consumer, error) {
-
-	var ok bool
-	var config *ConsumerConfig
-	if config, ok = rconfig.ConsumerConfigs[consumerName]; !ok {
-		return nil, fmt.Errorf("consumer %q was not found in config", consumerName)
-	}
-
-	return &Consumer{
-		Config:               config,
-		ConnectionPool:       cp,
-		Enabled:              true,
-		QueueName:            queuename,
-		ConsumerName:         consumerName,
-		errors:               make(chan error, 1000),
-		sleepOnErrorInterval: time.Duration(sleepOnErrorInterval) * time.Millisecond,
-		sleepOnIdleInterval:  time.Duration(sleepOnIdleInterval) * time.Millisecond,
-		messageGroup:         &sync.WaitGroup{},
-		receivedMessages:     make(chan *ReceivedMessage, 1000),
-		consumeStop:          make(chan bool, 1),
-		stopImmediate:        false,
-		started:              false,
-		autoAck:              autoAck,
-		exclusive:            exclusive,
-		noWait:               noWait,
-		args:                 args,
-		qosCountOverride:     qosCountOverride,
-		conLock:              &sync.Mutex{},
-	}, nil
 }
 
 // Get gets a single message from any queue. Auto-Acknowledges.
@@ -123,7 +80,7 @@ func (con *Consumer) Get(queueName string) (*amqp.Delivery, error) {
 func (con *Consumer) GetBatch(queueName string, batchSize int) ([]*amqp.Delivery, error) {
 
 	if batchSize < 1 {
-		return nil, errors.New("can't get a batch of messages whose size is less than 1")
+		return nil, errors.New("batchSize must be positive")
 	}
 
 	// Get Channel
@@ -133,20 +90,14 @@ func (con *Consumer) GetBatch(queueName string, batchSize int) ([]*amqp.Delivery
 	messages := make([]*amqp.Delivery, 0)
 
 	// Get A Batch of Messages
-GetBatchLoop:
-	for {
-		// Break if we have a full batch
-		if len(messages) == batchSize {
-			break GetBatchLoop
-		}
-
+	for i := 0; i < batchSize; i++ {
 		amqpDelivery, ok, err := channel.Get(queueName, true)
 		if err != nil {
 			return nil, err
 		}
 
 		if !ok { // Break If empty
-			break GetBatchLoop
+			break
 		}
 
 		messages = append(messages, &amqpDelivery)
@@ -155,23 +106,8 @@ GetBatchLoop:
 	return messages, nil
 }
 
-// StartConsuming starts the Consumer.
-func (con *Consumer) StartConsuming() {
-	con.conLock.Lock()
-	defer con.conLock.Unlock()
-
-	if con.Enabled {
-
-		con.FlushErrors()
-		con.FlushStop()
-
-		go con.startConsumeLoop(nil)
-		con.started = true
-	}
-}
-
-// StartConsumingWithAction starts the Consumer invoking a method on every ReceivedMessage.
-func (con *Consumer) StartConsumingWithAction(action func(*ReceivedMessage)) {
+// StartConsuming starts the Consumer invoking a method on every ReceivedMessage.
+func (con *Consumer) StartConsuming(action func(*ReceivedMessage)) {
 	con.conLock.Lock()
 	defer con.conLock.Unlock()
 
@@ -186,6 +122,13 @@ func (con *Consumer) StartConsumingWithAction(action func(*ReceivedMessage)) {
 }
 
 func (con *Consumer) startConsumeLoop(action func(*ReceivedMessage)) {
+
+	errFunc := func(ch *ChannelHost, err error) {
+		con.ConnectionPool.ReturnChannel(ch, true)
+		if con.sleepOnErrorInterval > 0 {
+			time.Sleep(con.sleepOnErrorInterval)
+		}
+	}
 
 ConsumeLoop:
 	for {
@@ -205,16 +148,17 @@ ConsumeLoop:
 
 		// Configure RabbitMQ channel QoS for Consumer
 		if con.qosCountOverride > 0 {
-			_ = chanHost.Channel.Qos(con.qosCountOverride, 0, false)
+			err := chanHost.Channel.Qos(con.qosCountOverride, 0, false)
+			if err != nil {
+				errFunc(chanHost, err)
+				continue
+			}
 		}
 
 		// Initiate consuming process.
 		deliveryChan, err := chanHost.Channel.Consume(con.QueueName, con.ConsumerName, con.autoAck, con.exclusive, false, con.noWait, nil)
 		if err != nil {
-			con.ConnectionPool.ReturnChannel(chanHost, true)
-			if con.sleepOnErrorInterval > 0 {
-				time.Sleep(con.sleepOnErrorInterval)
-			}
+			errFunc(chanHost, err)
 			continue
 		}
 
@@ -228,8 +172,9 @@ ConsumeLoop:
 	immediateStop := con.stopImmediate
 	con.conLock.Unlock()
 
+	// wait for every message to be received to the internal queue
 	if !immediateStop {
-		con.messageGroup.Wait() // wait for every message to be received to the internal queue
+		con.messageGroup.Wait()
 	}
 
 	con.conLock.Lock()
@@ -244,7 +189,7 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 	for {
 		// Listen for channel closure (close errors).
 		// Highest priority so separated to it's own select.
-	SelectError:
+	SelectLoop:
 		select {
 		case errorMessage := <-chanHost.Errors:
 			if errorMessage != nil {
@@ -255,16 +200,10 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 				}
 				return false
 			}
-		default:
-			break SelectError
-		}
 
-	SelectReadMessages:
-		select {
 		// Convert amqp.Delivery into our internal struct for later use.
 		// all buffered deliveries are wiped on a channel close error
 		case delivery := <-deliveryChan:
-
 			msg := NewReceivedMessage(
 				!con.autoAck,
 				delivery)
@@ -275,23 +214,18 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 				con.receivedMessages <- msg
 			}
 
-		default:
-			if con.sleepOnIdleInterval > 0 {
-				time.Sleep(con.sleepOnIdleInterval)
-			}
-			break SelectReadMessages
-		}
-
 		// Detect if we should stop consuming.
-	SelectStopConsume:
-		select {
 		case stop := <-con.consumeStop:
 			if stop {
 				con.ConnectionPool.ReturnChannel(chanHost, false)
 				return true
 			}
+
 		default:
-			break SelectStopConsume
+			if con.sleepOnIdleInterval > 0 {
+				time.Sleep(con.sleepOnIdleInterval)
+			}
+			break SelectLoop
 		}
 	}
 }
