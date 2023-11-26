@@ -82,7 +82,7 @@ func TestPublishWithHeaderAndConsumerReceivedHeader(t *testing.T) {
 	assert.NoError(t, err)
 
 	consumer, err := service.GetConsumer("TurboCookedRabbitConsumer-Ackable")
-	consumer.StartConsuming()
+	consumer.StartConsuming(nil)
 	assert.NoError(t, err)
 
 	data := <-consumer.ReceivedMessages()

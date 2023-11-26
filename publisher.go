@@ -29,8 +29,8 @@ type Publisher struct {
 	pubRWLock        *sync.RWMutex
 }
 
-// NewPublisherFromConfig creates and configures a new Publisher.
-func NewPublisherFromConfig(conf *RabbitSeasoning, cp *ConnectionPool) *Publisher {
+// NewPublisher creates and configures a new Publisher.
+func NewPublisher(conf *RabbitSeasoning, cp *ConnectionPool) *Publisher {
 
 	if conf.PublisherConfig.MaxRetryCount == 0 {
 		conf.PublisherConfig.MaxRetryCount = 5
@@ -415,7 +415,8 @@ func (pub *Publisher) Shutdown(shutdownPools bool) {
 
 	pub.stopAutoPublish()
 
-	if shutdownPools { // in case the ChannelPool is shared between structs, you can prevent it from shutting down
+	// in case the ChannelPool is shared between structs, you can prevent it from shutting down
+	if shutdownPools {
 		pub.ConnectionPool.Shutdown()
 	}
 }

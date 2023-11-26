@@ -50,10 +50,10 @@ func BenchmarkPublishAndConsumeMany(b *testing.B) {
 
 	consumerConfig, ok := seasoning.ConsumerConfigs["TurboCookedRabbitConsumer"]
 	assert.True(b, ok)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
-	consumer.StartConsuming()
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
+	consumer.StartConsuming(nil)
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	publisher.StartAutoPublishing()
 	defer publisher.Shutdown(false)
 
@@ -108,8 +108,13 @@ ReceivePublishConfirmations:
 	b.Logf("Consumer Errors: %d\r\n", consumerErrors)
 	b.Logf("Consumer Messages Received: %d\r\n", messagesReceived)
 
-	err := consumer.StopConsuming(true, true)
-	assert.NoError(b, err)
+	assert.True(b, consumer.Started())
+	consumer.StopConsuming(true)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
+	assert.False(b, consumer.Started())
 
 	cancel()
 }
@@ -133,13 +138,13 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 
 	b.ReportAllocs()
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	defer publisher.Shutdown(false)
 
 	consumerConfig, ok := seasoning.ConsumerConfigs["TurboCookedRabbitConsumer-Ackable"]
 	assert.True(b, ok)
-	consumer := fr.NewConsumerFromConfig(consumerConfig, connectionPool)
-	consumer.StartConsuming()
+	consumer := fr.NewConsumer(consumerConfig, connectionPool)
+	consumer.StartConsuming(nil)
 
 	go publishWithConfirmation(b, conMap, publishDone, timeDuration, publisher)
 	go consumeLoop(b, conMap, consumerDone, conTimeoutDuration, publisher, consumer)
@@ -147,8 +152,13 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 	<-publishDone
 	<-consumerDone
 
-	err := consumer.StopConsuming(true, true)
-	assert.NoError(b, err)
+	assert.True(b, consumer.Started())
+	consumer.StopConsuming(true)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
+	assert.False(b, consumer.Started())
 
 	b.Logf("Percentage of messages not received: %d\r\n", verifyAccuracyB(b, conMap))
 }

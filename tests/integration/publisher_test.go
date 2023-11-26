@@ -49,7 +49,7 @@ func TestBasicPublishToNonExistentExchange(t *testing.T) {
 func TestPublishAndWaitForReceipt(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
+	publisher := fr.NewPublisher(Seasoning, RabbitService.ConnectionPool)
 	assert.NotNil(t, publisher)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
@@ -72,7 +72,7 @@ WaitLoop:
 func TestPublishWithConfirmation(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
+	publisher := fr.NewPublisher(Seasoning, RabbitService.ConnectionPool)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	e := publisher.PublishWithConfirmation(letter, time.Millisecond*500)
@@ -111,7 +111,7 @@ func TestPublishAccuracy(t *testing.T) {
 		fmt.Printf("Messages: %f msg/s\r\n", float64(count)/diff.Seconds())
 	}()
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, RabbitService.ConnectionPool)
+	publisher := fr.NewPublisher(Seasoning, RabbitService.ConnectionPool)
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
 	letter.Envelope.DeliveryMode = amqp.Transient
 
@@ -152,7 +152,7 @@ func TestPublishWithConfirmationAccuracy(t *testing.T) {
 	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
 	assert.NoError(t, err)
 
-	publisher := fr.NewPublisherFromConfig(Seasoning, connectionPool)
+	publisher := fr.NewPublisher(Seasoning, connectionPool)
 	defer publisher.Shutdown(true)
 
 	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")

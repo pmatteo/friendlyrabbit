@@ -1,7 +1,6 @@
 package friendlyrabbit
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,16 +12,12 @@ import (
 type Consumer struct {
 	Config               *ConsumerConfig
 	ConnectionPool       *ConnectionPool
-	Enabled              bool
 	QueueName            string
 	ConsumerName         string
 	errors               chan error
 	sleepOnErrorInterval time.Duration
-	sleepOnIdleInterval  time.Duration
-	messageGroup         *sync.WaitGroup
 	receivedMessages     chan *ReceivedMessage
 	consumeStop          chan bool
-	stopImmediate        bool
 	started              bool
 	autoAck              bool
 	exclusive            bool
@@ -32,19 +27,16 @@ type Consumer struct {
 	conLock              *sync.Mutex
 }
 
-// NewConsumerFromConfig creates a new Consumer to receive messages from a specific queuename.
-func NewConsumerFromConfig(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
+// NewConsumer creates a new Consumer to receive messages from a specific queuename.
+func NewConsumer(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
 
 	return &Consumer{
 		Config:               config,
 		ConnectionPool:       cp,
-		Enabled:              config.Enabled,
 		QueueName:            config.QueueName,
 		ConsumerName:         config.ConsumerName,
 		errors:               make(chan error, 1000),
 		sleepOnErrorInterval: time.Duration(config.SleepOnErrorInterval) * time.Millisecond,
-		sleepOnIdleInterval:  time.Duration(config.SleepOnIdleInterval) * time.Millisecond,
-		messageGroup:         &sync.WaitGroup{},
 		receivedMessages:     make(chan *ReceivedMessage, 1000),
 		consumeStop:          make(chan bool, 1),
 		autoAck:              config.AutoAck,
@@ -54,49 +46,6 @@ func NewConsumerFromConfig(config *ConsumerConfig, cp *ConnectionPool) *Consumer
 		qosCountOverride:     config.QosCountOverride,
 		conLock:              &sync.Mutex{},
 	}
-}
-
-// NewConsumer creates a new Consumer to receive messages from a specific queuename.
-func NewConsumer(
-	rconfig *RabbitSeasoning,
-	cp *ConnectionPool,
-	queuename string,
-	consumerName string,
-	autoAck bool,
-	exclusive bool,
-	noWait bool,
-	args map[string]interface{},
-	qosCountOverride int, // if zero ignored
-	sleepOnErrorInterval uint32,
-	sleepOnIdleInterval uint32) (*Consumer, error) {
-
-	var ok bool
-	var config *ConsumerConfig
-	if config, ok = rconfig.ConsumerConfigs[consumerName]; !ok {
-		return nil, fmt.Errorf("consumer %q was not found in config", consumerName)
-	}
-
-	return &Consumer{
-		Config:               config,
-		ConnectionPool:       cp,
-		Enabled:              true,
-		QueueName:            queuename,
-		ConsumerName:         consumerName,
-		errors:               make(chan error, 1000),
-		sleepOnErrorInterval: time.Duration(sleepOnErrorInterval) * time.Millisecond,
-		sleepOnIdleInterval:  time.Duration(sleepOnIdleInterval) * time.Millisecond,
-		messageGroup:         &sync.WaitGroup{},
-		receivedMessages:     make(chan *ReceivedMessage, 1000),
-		consumeStop:          make(chan bool, 1),
-		stopImmediate:        false,
-		started:              false,
-		autoAck:              autoAck,
-		exclusive:            exclusive,
-		noWait:               noWait,
-		args:                 args,
-		qosCountOverride:     qosCountOverride,
-		conLock:              &sync.Mutex{},
-	}, nil
 }
 
 // Get gets a single message from any queue. Auto-Acknowledges.
@@ -119,73 +68,26 @@ func (con *Consumer) Get(queueName string) (*amqp.Delivery, error) {
 	return nil, nil
 }
 
-// GetBatch gets a group of messages from any queue. Auto-Acknowledges.
-func (con *Consumer) GetBatch(queueName string, batchSize int) ([]*amqp.Delivery, error) {
-
-	if batchSize < 1 {
-		return nil, errors.New("can't get a batch of messages whose size is less than 1")
-	}
-
-	// Get Channel
-	channel := con.ConnectionPool.GetTransientChannel(false)
-	defer channel.Close()
-
-	messages := make([]*amqp.Delivery, 0)
-
-	// Get A Batch of Messages
-GetBatchLoop:
-	for {
-		// Break if we have a full batch
-		if len(messages) == batchSize {
-			break GetBatchLoop
-		}
-
-		amqpDelivery, ok, err := channel.Get(queueName, true)
-		if err != nil {
-			return nil, err
-		}
-
-		if !ok { // Break If empty
-			break GetBatchLoop
-		}
-
-		messages = append(messages, &amqpDelivery)
-	}
-
-	return messages, nil
-}
-
-// StartConsuming starts the Consumer.
-func (con *Consumer) StartConsuming() {
+// StartConsuming starts the Consumer invoking a method on every ReceivedMessage.
+func (con *Consumer) StartConsuming(action func(*ReceivedMessage)) {
 	con.conLock.Lock()
 	defer con.conLock.Unlock()
 
-	if con.Enabled {
+	con.FlushErrors()
+	con.FlushStop()
 
-		con.FlushErrors()
-		con.FlushStop()
-
-		go con.startConsumeLoop(nil)
-		con.started = true
-	}
-}
-
-// StartConsumingWithAction starts the Consumer invoking a method on every ReceivedMessage.
-func (con *Consumer) StartConsumingWithAction(action func(*ReceivedMessage)) {
-	con.conLock.Lock()
-	defer con.conLock.Unlock()
-
-	if con.Enabled {
-
-		con.FlushErrors()
-		con.FlushStop()
-
-		go con.startConsumeLoop(action)
-		con.started = true
-	}
+	go con.startConsumeLoop(action)
+	con.started = true
 }
 
 func (con *Consumer) startConsumeLoop(action func(*ReceivedMessage)) {
+
+	errFunc := func(ch *ChannelHost, err error) {
+		con.ConnectionPool.ReturnChannel(ch, true)
+		if con.sleepOnErrorInterval > 0 {
+			time.Sleep(con.sleepOnErrorInterval)
+		}
+	}
 
 ConsumeLoop:
 	for {
@@ -205,16 +107,17 @@ ConsumeLoop:
 
 		// Configure RabbitMQ channel QoS for Consumer
 		if con.qosCountOverride > 0 {
-			_ = chanHost.Channel.Qos(con.qosCountOverride, 0, false)
+			err := chanHost.Channel.Qos(con.qosCountOverride, 0, false)
+			if err != nil {
+				errFunc(chanHost, err)
+				continue
+			}
 		}
 
 		// Initiate consuming process.
 		deliveryChan, err := chanHost.Channel.Consume(con.QueueName, con.ConsumerName, con.autoAck, con.exclusive, false, con.noWait, nil)
 		if err != nil {
-			con.ConnectionPool.ReturnChannel(chanHost, true)
-			if con.sleepOnErrorInterval > 0 {
-				time.Sleep(con.sleepOnErrorInterval)
-			}
+			errFunc(chanHost, err)
 			continue
 		}
 
@@ -225,16 +128,7 @@ ConsumeLoop:
 	}
 
 	con.conLock.Lock()
-	immediateStop := con.stopImmediate
-	con.conLock.Unlock()
-
-	if !immediateStop {
-		con.messageGroup.Wait() // wait for every message to be received to the internal queue
-	}
-
-	con.conLock.Lock()
 	con.started = false
-	con.stopImmediate = false
 	con.conLock.Unlock()
 }
 
@@ -242,8 +136,6 @@ ConsumeLoop:
 func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHost *ChannelHost, action func(*ReceivedMessage)) bool {
 
 	for {
-		// Listen for channel closure (close errors).
-		// Highest priority so separated to it's own select.
 	SelectError:
 		select {
 		case errorMessage := <-chanHost.Errors:
@@ -265,20 +157,13 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 		// all buffered deliveries are wiped on a channel close error
 		case delivery := <-deliveryChan:
 
-			msg := NewReceivedMessage(
-				!con.autoAck,
-				delivery)
-
 			if action != nil {
-				action(msg)
+				action(NewReceivedMessage(!con.autoAck, delivery))
 			} else {
-				con.receivedMessages <- msg
+				con.receivedMessages <- NewReceivedMessage(!con.autoAck, delivery)
 			}
 
 		default:
-			if con.sleepOnIdleInterval > 0 {
-				time.Sleep(con.sleepOnIdleInterval)
-			}
 			break SelectReadMessages
 		}
 
@@ -300,23 +185,20 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 // Will stop on the consumer channelclose or responding to signal after getting all remaining deviveries.
 // FlushMessages empties the internal buffer of messages received by queue. Ackable messages are still in
 // RabbitMQ queue, while noAck messages will unfortunately be lost. Use wisely.
-func (con *Consumer) StopConsuming(immediate bool, flushMessages bool) error {
+func (con *Consumer) StopConsuming(flushMessages bool) {
 	con.conLock.Lock()
 	defer con.conLock.Unlock()
 
 	if !con.started {
-		return errors.New("can't stop a stopped consumer")
+		return
 	}
 
-	con.stopImmediate = immediate
 	con.consumeStop <- true
 
 	// This helps terminate all goroutines trying to add messages too.
 	if flushMessages {
 		con.FlushMessages()
 	}
-
-	return nil
 }
 
 // ReceivedMessages yields all the internal messages ready for consuming.

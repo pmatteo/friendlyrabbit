@@ -60,7 +60,6 @@ func createTLSConfig(pemLocation string, localLocation string) (*tls.Config, err
 
 // ConsumerConfig represents settings for configuring a consumer with ease.
 type ConsumerConfig struct {
-	Enabled              bool                   `json:"Enabled" yaml:"Enabled"`
 	QueueName            string                 `json:"QueueName" yaml:"QueueName"`
 	ConsumerName         string                 `json:"ConsumerName" yaml:"ConsumerName"`
 	AutoAck              bool                   `json:"AutoAck" yaml:"AutoAck"`
@@ -69,7 +68,6 @@ type ConsumerConfig struct {
 	Args                 map[string]interface{} `json:"Args" yaml:"Args"`
 	QosCountOverride     int                    `json:"QosCountOverride" yaml:"QosCountOverride"`         // if zero ignored
 	SleepOnErrorInterval uint32                 `json:"SleepOnErrorInterval" yaml:"SleepOnErrorInterval"` // sleep on error
-	SleepOnIdleInterval  uint32                 `json:"SleepOnIdleInterval" yaml:"SleepOnIdleInterval"`   // sleep on idle
 }
 
 // PublisherConfig represents settings for configuring global settings for all Publishers with ease.

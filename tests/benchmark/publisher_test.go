@@ -23,7 +23,7 @@ func BenchmarkPublishWithConfirmationForDuration(b *testing.B) {
 
 	b.ReportAllocs()
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	defer publisher.Shutdown(false)
 
 	publishDone := make(chan bool, 1)
@@ -45,7 +45,7 @@ func BenchmarkPublishForDuration(b *testing.B) {
 
 	b.ReportAllocs()
 
-	publisher := fr.NewPublisherFromConfig(seasoning, connectionPool)
+	publisher := fr.NewPublisher(seasoning, connectionPool)
 	defer publisher.Shutdown(false)
 
 	publishDone := make(chan bool, 1)

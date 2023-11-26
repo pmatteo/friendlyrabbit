@@ -31,7 +31,6 @@ func setup() error {
 		},
 		ConsumerConfigs: map[string]*fr.ConsumerConfig{
 			"TurboCookedRabbitConsumer": {
-				Enabled:              true,
 				QueueName:            "TestUnitQueue",
 				ConsumerName:         "TurboCookedRabbitConsumer",
 				AutoAck:              true,
@@ -39,10 +38,8 @@ func setup() error {
 				NoWait:               false,
 				QosCountOverride:     100,
 				SleepOnErrorInterval: 0,
-				SleepOnIdleInterval:  0,
 			},
 			"TurboCookedRabbitConsumer-Ackable": {
-				Enabled:              true,
 				QueueName:            "TestUnitQueue",
 				ConsumerName:         "TurboCookedRabbitConsumer-Ackable",
 				AutoAck:              false,
@@ -50,7 +47,6 @@ func setup() error {
 				NoWait:               false,
 				QosCountOverride:     100,
 				SleepOnErrorInterval: 0,
-				SleepOnIdleInterval:  0,
 			},
 		},
 		PublisherConfig: &fr.PublisherConfig{
