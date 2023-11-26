@@ -98,7 +98,7 @@ func CreateWrappedPayload(
 	}
 
 	buffer := &bytes.Buffer{}
-	if compressionConf.Enabled {
+	if compressionConf != nil && compressionConf.Enabled {
 		err := compression.Compress(compressionConf.Type, innerData, buffer)
 		if err != nil {
 			return nil, err
@@ -110,7 +110,7 @@ func CreateWrappedPayload(
 		innerData = buffer.Bytes()
 	}
 
-	if encryptionConf.Enabled {
+	if encryptionConf != nil && encryptionConf.Enabled {
 		err := crypto.Encrypt(encryptionConf.Type, encryptionConf.Hashkey, innerData, buffer)
 		if err != nil {
 			return nil, err
