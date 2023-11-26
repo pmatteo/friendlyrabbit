@@ -3,6 +3,7 @@ package unit_tests
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/fortytw2/leaktest"
 	fr "github.com/pmatteo/friendlyrabbit"
@@ -38,6 +39,10 @@ func TestConsumerStartStop(t *testing.T) {
 
 	assert.True(t, consumer.Started())
 	consumer.StopConsuming(false)
+
+	// Wait processing to stop
+	time.Sleep(100 * time.Millisecond)
+
 	assert.False(t, consumer.Started())
 }
 
@@ -58,6 +63,10 @@ func TestConsumerStartWithActionStop(t *testing.T) {
 
 	assert.True(t, consumer.Started())
 	consumer.StopConsuming(false)
+
+	// Wait processing to stop
+	time.Sleep(100 * time.Millisecond)
+
 	assert.False(t, consumer.Started())
 }
 

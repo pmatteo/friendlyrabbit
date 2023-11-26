@@ -38,7 +38,6 @@ func setup() error {
 				NoWait:               false,
 				QosCountOverride:     100,
 				SleepOnErrorInterval: 0,
-				SleepOnIdleInterval:  0,
 			},
 			"TurboCookedRabbitConsumer-Ackable": {
 				QueueName:            "TestUnitQueue",
@@ -48,7 +47,6 @@ func setup() error {
 				NoWait:               false,
 				QosCountOverride:     100,
 				SleepOnErrorInterval: 0,
-				SleepOnIdleInterval:  0,
 			},
 		},
 		PublisherConfig: &fr.PublisherConfig{
