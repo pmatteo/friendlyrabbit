@@ -136,8 +136,7 @@ ConsumeLoop:
 func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHost *ChannelHost, action func(*ReceivedMessage)) bool {
 
 	for {
-		// Listen for channel closure (close errors). Highest priority so separated to it's own select.
-	SelectLoop:
+	SelectError:
 		select {
 		case errorMessage := <-chanHost.Errors:
 			if errorMessage != nil {
@@ -148,25 +147,36 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 				}
 				return false
 			}
+		default:
+			break SelectError
+		}
 
-		// Convert amqp.Delivery into our internal struct for later use. all buffered deliveries are wiped on a
-		// channel close error.
+	SelectReadMessages:
+		select {
+		// Convert amqp.Delivery into our internal struct for later use.
+		// all buffered deliveries are wiped on a channel close error
 		case delivery := <-deliveryChan:
+
 			if action != nil {
 				action(NewReceivedMessage(!con.autoAck, delivery))
 			} else {
 				con.receivedMessages <- NewReceivedMessage(!con.autoAck, delivery)
 			}
 
+		default:
+			break SelectReadMessages
+		}
+
 		// Detect if we should stop consuming.
+	SelectStopConsume:
+		select {
 		case stop := <-con.consumeStop:
 			if stop {
 				con.ConnectionPool.ReturnChannel(chanHost, false)
 				return true
 			}
-
 		default:
-			break SelectLoop
+			break SelectStopConsume
 		}
 	}
 }
