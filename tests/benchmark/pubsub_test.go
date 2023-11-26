@@ -110,6 +110,10 @@ ReceivePublishConfirmations:
 
 	assert.True(b, consumer.Started())
 	consumer.StopConsuming(true)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
 	assert.False(b, consumer.Started())
 
 	cancel()
@@ -150,6 +154,10 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 
 	assert.True(b, consumer.Started())
 	consumer.StopConsuming(true)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
 	assert.False(b, consumer.Started())
 
 	b.Logf("Percentage of messages not received: %d\r\n", verifyAccuracyB(b, conMap))

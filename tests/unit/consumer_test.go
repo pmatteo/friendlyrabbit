@@ -41,7 +41,7 @@ func TestConsumerStartStop(t *testing.T) {
 	consumer.StopConsuming(false)
 
 	// Wait processing to stop
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	assert.False(t, consumer.Started())
 }
@@ -65,7 +65,7 @@ func TestConsumerStartWithActionStop(t *testing.T) {
 	consumer.StopConsuming(false)
 
 	// Wait processing to stop
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	assert.False(t, consumer.Started())
 }

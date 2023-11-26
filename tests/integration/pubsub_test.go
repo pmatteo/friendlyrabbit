@@ -45,6 +45,10 @@ func TestConsumingAfterPublish(t *testing.T) {
 
 	assert.True(t, consumer.Started())
 	consumer.StopConsuming(false)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
 	assert.False(t, consumer.Started())
 }
 
@@ -87,6 +91,10 @@ func TestConsumingAftersPublishLarge(t *testing.T) {
 
 	assert.True(t, consumer.Started())
 	consumer.StopConsuming(false)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
 	assert.False(t, consumer.Started())
 }
 
@@ -129,6 +137,10 @@ func TestConsumingAfterPublishConfirmationLarge(t *testing.T) {
 
 	assert.True(t, consumer.Started())
 	consumer.StopConsuming(false)
+
+	// Wait processing to stop
+	time.Sleep(50 * time.Millisecond)
+
 	assert.False(t, consumer.Started())
 }
 
