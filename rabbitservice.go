@@ -283,10 +283,7 @@ func (rs *RabbitService) Shutdown(stopConsumers bool) {
 
 	if stopConsumers {
 		for _, consumer := range rs.consumers {
-			err := consumer.StopConsuming(true, true)
-			if err != nil {
-				rs.centralErr <- err
-			}
+			consumer.StopConsuming(true)
 		}
 	}
 

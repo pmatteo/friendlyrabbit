@@ -60,7 +60,6 @@ func createTLSConfig(pemLocation string, localLocation string) (*tls.Config, err
 
 // ConsumerConfig represents settings for configuring a consumer with ease.
 type ConsumerConfig struct {
-	Enabled              bool                   `json:"Enabled" yaml:"Enabled"`
 	QueueName            string                 `json:"QueueName" yaml:"QueueName"`
 	ConsumerName         string                 `json:"ConsumerName" yaml:"ConsumerName"`
 	AutoAck              bool                   `json:"AutoAck" yaml:"AutoAck"`
