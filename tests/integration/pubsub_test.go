@@ -43,8 +43,9 @@ func TestConsumingAfterPublish(t *testing.T) {
 	<-done1
 	<-done2
 
-	err = consumer.StopConsuming(false, false)
-	assert.NoError(t, err)
+	assert.True(t, consumer.Started())
+	consumer.StopConsuming(false)
+	assert.False(t, consumer.Started())
 }
 
 // TestConsumingAftersPublishLarge is a combination test of Consuming and Publishing
@@ -84,8 +85,9 @@ func TestConsumingAftersPublishLarge(t *testing.T) {
 	<-done1
 	<-done2
 
-	err = consumer.StopConsuming(false, false)
-	assert.NoError(t, err)
+	assert.True(t, consumer.Started())
+	consumer.StopConsuming(false)
+	assert.False(t, consumer.Started())
 }
 
 // TestConsumingAfterPublishConfirmationLarge is a combination test of Consuming and Publishing with confirmation.
@@ -125,8 +127,9 @@ func TestConsumingAfterPublishConfirmationLarge(t *testing.T) {
 	<-done1
 	<-done2
 
-	err = consumer.StopConsuming(false, false)
-	assert.NoError(t, err)
+	assert.True(t, consumer.Started())
+	consumer.StopConsuming(false)
+	assert.False(t, consumer.Started())
 }
 
 // TestPublishConfirmation is a combination test of Consuming and Publishing with confirmation.

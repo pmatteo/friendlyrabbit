@@ -108,8 +108,9 @@ ReceivePublishConfirmations:
 	b.Logf("Consumer Errors: %d\r\n", consumerErrors)
 	b.Logf("Consumer Messages Received: %d\r\n", messagesReceived)
 
-	err := consumer.StopConsuming(true, true)
-	assert.NoError(b, err)
+	assert.True(b, consumer.Started())
+	consumer.StopConsuming(true)
+	assert.False(b, consumer.Started())
 
 	cancel()
 }
@@ -147,8 +148,9 @@ func BenchmarkPublishConsumeAckForDuration(b *testing.B) {
 	<-publishDone
 	<-consumerDone
 
-	err := consumer.StopConsuming(true, true)
-	assert.NoError(b, err)
+	assert.True(b, consumer.Started())
+	consumer.StopConsuming(true)
+	assert.False(b, consumer.Started())
 
 	b.Logf("Percentage of messages not received: %d\r\n", verifyAccuracyB(b, conMap))
 }

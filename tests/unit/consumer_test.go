@@ -35,8 +35,10 @@ func TestConsumerStartStop(t *testing.T) {
 	assert.NotNil(t, consumer)
 
 	consumer.StartConsuming(nil)
-	err = consumer.StopConsuming(false, false)
-	assert.NoError(t, err)
+
+	assert.True(t, consumer.Started())
+	consumer.StopConsuming(false)
+	assert.False(t, consumer.Started())
 }
 
 func TestConsumerStartWithActionStop(t *testing.T) {
@@ -53,8 +55,10 @@ func TestConsumerStartWithActionStop(t *testing.T) {
 			fmt.Printf("Error acking message: %v\r\n", msg.Delivery.Body)
 		}
 	})
-	err = consumer.StopConsuming(false, false)
-	assert.NoError(t, err)
+
+	assert.True(t, consumer.Started())
+	consumer.StopConsuming(false)
+	assert.False(t, consumer.Started())
 }
 
 func TestConsumerGet(t *testing.T) {

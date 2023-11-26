@@ -35,7 +35,6 @@ func setup() error {
 		},
 		ConsumerConfigs: map[string]*fr.ConsumerConfig{
 			"TurboCookedRabbitConsumer": {
-				Enabled:              true,
 				QueueName:            "TestBenchmarkQueue",
 				ConsumerName:         "TurboCookedRabbitConsumer",
 				AutoAck:              true,
@@ -46,7 +45,6 @@ func setup() error {
 				SleepOnIdleInterval:  0,
 			},
 			"TurboCookedRabbitConsumer-Ackable": {
-				Enabled:              true,
 				QueueName:            "TestBenchmarkQueue",
 				ConsumerName:         "TurboCookedRabbitConsumer-Ackable",
 				AutoAck:              false,
