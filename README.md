@@ -27,7 +27,6 @@ poolConfig := &PoolConfig{}
 connectionPool, err := friendlyrabbit.NewConnectionPool(poolConfig)
 ```
 
-
 #### Create a simple Publisher
 
 ```go
