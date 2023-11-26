@@ -16,7 +16,6 @@ type Consumer struct {
 	ConsumerName         string
 	errors               chan error
 	sleepOnErrorInterval time.Duration
-	sleepOnIdleInterval  time.Duration
 	receivedMessages     chan *ReceivedMessage
 	consumeStop          chan bool
 	started              bool
@@ -38,7 +37,6 @@ func NewConsumer(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
 		ConsumerName:         config.ConsumerName,
 		errors:               make(chan error, 1000),
 		sleepOnErrorInterval: time.Duration(config.SleepOnErrorInterval) * time.Millisecond,
-		sleepOnIdleInterval:  time.Duration(config.SleepOnIdleInterval) * time.Millisecond,
 		receivedMessages:     make(chan *ReceivedMessage, 1000),
 		consumeStop:          make(chan bool, 1),
 		autoAck:              config.AutoAck,
@@ -154,14 +152,10 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 		// Convert amqp.Delivery into our internal struct for later use. all buffered deliveries are wiped on a
 		// channel close error.
 		case delivery := <-deliveryChan:
-			msg := NewReceivedMessage(
-				!con.autoAck,
-				delivery)
-
 			if action != nil {
-				action(msg)
+				action(NewReceivedMessage(!con.autoAck, delivery))
 			} else {
-				con.receivedMessages <- msg
+				con.receivedMessages <- NewReceivedMessage(!con.autoAck, delivery)
 			}
 
 		// Detect if we should stop consuming.
@@ -172,9 +166,6 @@ func (con *Consumer) processDeliveries(deliveryChan <-chan amqp.Delivery, chanHo
 			}
 
 		default:
-			if con.sleepOnIdleInterval > 0 {
-				time.Sleep(con.sleepOnIdleInterval)
-			}
 			break SelectLoop
 		}
 	}

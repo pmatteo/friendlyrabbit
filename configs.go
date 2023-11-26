@@ -68,7 +68,6 @@ type ConsumerConfig struct {
 	Args                 map[string]interface{} `json:"Args" yaml:"Args"`
 	QosCountOverride     int                    `json:"QosCountOverride" yaml:"QosCountOverride"`         // if zero ignored
 	SleepOnErrorInterval uint32                 `json:"SleepOnErrorInterval" yaml:"SleepOnErrorInterval"` // sleep on error
-	SleepOnIdleInterval  uint32                 `json:"SleepOnIdleInterval" yaml:"SleepOnIdleInterval"`   // sleep on idle
 }
 
 // PublisherConfig represents settings for configuring global settings for all Publishers with ease.
