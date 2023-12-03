@@ -9,15 +9,14 @@ import (
 
 // ChannelHost is an internal representation of amqp.Channel.
 type ChannelHost struct {
-	Channel       *amqp.Channel
-	ID            uint64
-	ConnectionID  uint64
-	Ackable       bool
-	CachedChannel bool
-	Errors        chan *amqp.Error
-	connHost      *ConnectionHost
-	chanLock      *sync.Mutex
-	transient     bool
+	Channel      *amqp.Channel
+	ID           uint64
+	ConnectionID uint64
+	Ackable      bool
+	transient    bool
+	Errors       chan *amqp.Error
+	connHost     *ConnectionHost
+	chanLock     *sync.Mutex
 }
 
 // NewChannelHost creates a simple ChannelHost wrapper for management by end-user developer.
@@ -25,7 +24,7 @@ func NewChannelHost(
 	connHost *ConnectionHost,
 	id uint64,
 	connectionID uint64,
-	ackable, cached bool,
+	ackable, transient bool,
 ) (*ChannelHost, error) {
 
 	if connHost.Connection.IsClosed() {
@@ -33,12 +32,12 @@ func NewChannelHost(
 	}
 
 	chanHost := &ChannelHost{
-		ID:            id,
-		ConnectionID:  connectionID,
-		Ackable:       ackable,
-		CachedChannel: cached,
-		connHost:      connHost,
-		chanLock:      &sync.Mutex{},
+		ID:           id,
+		ConnectionID: connectionID,
+		Ackable:      ackable,
+		transient:    transient,
+		connHost:     connHost,
+		chanLock:     &sync.Mutex{},
 	}
 
 	err := chanHost.MakeChannel()

@@ -217,7 +217,7 @@ func (cp *ConnectionPool) GetChannelFromPool() *ChannelHost {
 func (cp *ConnectionPool) ReturnChannel(chanHost *ChannelHost, erred bool) {
 
 	// If called by user with the wrong channel don't add a non-managed channel back to the channel cache.
-	if chanHost.CachedChannel {
+	if chanHost.transient {
 		if erred {
 			cp.reconnectChannel(chanHost) // <- blocking operation
 		}
