@@ -1,7 +1,6 @@
 package unit_tests
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,46 +8,95 @@ import (
 	"github.com/pmatteo/friendlyrabbit/internal/utils/compression"
 	"github.com/pmatteo/friendlyrabbit/internal/utils/crypto"
 	"github.com/pmatteo/friendlyrabbit/tests/mock"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEnvelopeCreate(t *testing.T) {
-	e := fr.NewEnvelope(context.Background(), "TestUnitExchange", "TestUnitKey", amqp.Table{
-		"TestUnitHeader": "TestUnitValue",
-	})
+func TestLetterCreateDefault(t *testing.T) {
+	l, err := fr.NewLetter("Exchange", "Key", []byte("TestUnitQueue"))
+	assert.NoError(t, err)
+	assert.NotNil(t, l)
+	assert.NotNil(t, l.LetterID)
+	assert.NotEqual(t, uuid.Nil, l.LetterID)
+	assert.Equal(t, []byte("TestUnitQueue"), l.Body)
 
-	assert.NotNil(t, e)
-	assert.Equal(t, e.Exchange, "TestUnitExchange")
-	assert.Equal(t, e.RoutingKey, "TestUnitKey")
-	assert.Equal(t, e.DeliveryMode, amqp.Persistent)
-	assert.Equal(t, e.Mandatory, false)
-	assert.Equal(t, e.Ctx, context.Background())
-	assert.NotNil(t, e.Headers)
-	assert.NotEmpty(t, e.Headers)
-	assert.Equal(t, e.Headers["TestUnitHeader"], "TestUnitValue")
+	opts := l.Options()
+
+	assert.NotNil(t, opts)
+	assert.Empty(t, opts.Headers)
+	assert.Equal(t, "Exchange", opts.Exchange)
+	assert.Equal(t, "Key", opts.RoutingKey)
+	assert.Equal(t, false, opts.Mandatory)
+	assert.Equal(t, false, opts.Immediate)
+	assert.Equal(t, "application/json", opts.ContentType)
+	assert.Equal(t, "", opts.CorrelationID)
+	assert.Equal(t, "", opts.MessageType)
+	assert.Equal(t, uint8(0), opts.Priority)
+	assert.Equal(t, uint8(2), opts.DeliveryMode)
+	assert.Equal(t, uint16(3), opts.RetryCount)
+	assert.Nil(t, opts.EConf)
+	assert.Nil(t, opts.CConf)
 }
 
-func TestLetterCreate(t *testing.T) {
-	e := fr.NewEnvelope(context.Background(), "Exchange", "Key", nil)
-	id := uuid.New()
-	l := fr.NewLetter(id, e, []byte("TestUnitQueue"))
+func TestLetterCreateWithOptions(t *testing.T) {
+	e := &fr.EncryptionConfig{
+		Enabled:           false,
+		Hashkey:           crypto.GetHashWithArgon("password", "salt", 1, 12, 64, 32),
+		Type:              crypto.AesSymmetricType,
+		TimeConsideration: 1,
+		Threads:           6,
+	}
+	c := &fr.CompressionConfig{Enabled: true}
+	h := map[string]interface{}{"test-header": "test-value"}
 
+	l, err := fr.NewLetter(
+		"Exchange", "Key", []byte("TestUnitQueue"),
+		fr.WithHeaders(h),
+		fr.WithCorrelationID("correlation-id"),
+		fr.WithCompressionConfig(c),
+		fr.WithEncryptionConfig(e),
+		func(lo *fr.LetterOpts) {
+			lo.ContentType = "application/plain-text"
+			lo.Priority = 2
+			lo.DeliveryMode = 1
+			lo.RetryCount = 10
+		},
+	)
+
+	assert.NoError(t, err)
 	assert.NotNil(t, l)
-	assert.Equal(t, l.LetterID, id)
-	assert.NotNil(t, l.Envelope)
-	assert.Equal(t, e, l.Envelope)
-	assert.Equal(t, []byte("TestUnitQueue"), l.Body)
-	assert.Equal(t, uint32(3), l.RetryCount)
+	assert.NotNil(t, l.LetterID)
+	assert.NotEqual(t, uuid.Nil, l.LetterID)
+	assert.NotEmpty(t, l.Body)
+
+	opts := l.Options()
+
+	assert.NotNil(t, opts)
+	assert.NotEmpty(t, opts.Headers)
+	assert.Equal(t, 1, len(opts.Headers))
+	v, ok := opts.Headers["test-header"]
+	assert.True(t, ok)
+	assert.Equal(t, "test-value", v)
+
+	assert.Equal(t, "Exchange", opts.Exchange)
+	assert.Equal(t, "Key", opts.RoutingKey)
+	assert.Equal(t, false, opts.Mandatory)
+	assert.Equal(t, false, opts.Immediate)
+	assert.Equal(t, "application/plain-text", opts.ContentType)
+	assert.Equal(t, "correlation-id", opts.CorrelationID)
+	assert.Equal(t, "", opts.MessageType)
+	assert.Equal(t, uint8(2), opts.Priority)
+	assert.Equal(t, uint8(1), opts.DeliveryMode)
+	assert.Equal(t, uint16(10), opts.RetryCount)
+	assert.NotNil(t, opts.EConf)
+	assert.Equal(t, e, opts.EConf)
+	assert.NotNil(t, opts.CConf)
+	assert.Equal(t, c, opts.CConf)
 }
 
 func TestTableNewLetterWithPayload(t *testing.T) {
-	e := fr.NewEnvelope(context.Background(), "Exchange", "Key", nil)
-	hashy := crypto.GetHashWithArgon("password", "salt", 1, 12, 64, 32)
-
 	encrypt := &fr.EncryptionConfig{
 		Enabled:           false,
-		Hashkey:           hashy,
+		Hashkey:           crypto.GetHashWithArgon("password", "salt", 1, 12, 64, 32),
 		Type:              crypto.AesSymmetricType,
 		TimeConsideration: 1,
 		Threads:           6,
@@ -89,7 +137,7 @@ func TestTableNewLetterWithPayload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			l, err := fr.NewLetterWithPayload(e, data, encryption, compression, false, "")
+			l, err := fr.NewLetter("Exchange", "Key", data, fr.WithCompressionConfig(compression), fr.WithEncryptionConfig(encryption))
 
 			assert.NotNil(t, l)
 			assert.NoError(t, err)
@@ -97,11 +145,6 @@ func TestTableNewLetterWithPayload(t *testing.T) {
 			assert.NotNil(t, l.LetterID)
 			assert.NotEmpty(t, l.LetterID)
 			assert.NotEqual(t, uuid.Nil, l.LetterID)
-
-			assert.Equal(t, uint32(3), l.RetryCount)
-
-			assert.NotNil(t, l.Envelope)
-			assert.Equal(t, e, l.Envelope)
 
 			assert.NoError(t, err)
 			assert.Equal(t, expectedData, l.Body)

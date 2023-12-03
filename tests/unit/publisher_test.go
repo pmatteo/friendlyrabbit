@@ -31,9 +31,8 @@ func TestPublisherPublishWithError(t *testing.T) {
 func TestPublisherPublishWithConfirmationContextWithError(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	letter := mock.CreateMockRandomLetter("TestUnitQueue")
 	ctx, cancelFun := context.WithCancel(context.Background())
-	letter.Envelope.Ctx = ctx
+	letter := mock.CreateMockRandomLetter("TestUnitQueue", fr.WithContext(ctx))
 
 	// call function istantly so when publisher try to publish it match the ctx.Done() condition
 	cancelFun()
@@ -45,9 +44,8 @@ func TestPublisherPublishWithConfirmationContextWithError(t *testing.T) {
 func TestPublisherPublishWithConfirmationContextWithoutError(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	letter := mock.CreateMockRandomLetter("TestUnitQueue")
 	ctx, cancelFun := context.WithCancel(context.Background())
-	letter.Envelope.Ctx = ctx
+	letter := mock.CreateMockRandomLetter("TestUnitQueue", fr.WithContext(ctx))
 
 	// call function later when publisher already published
 	defer cancelFun()

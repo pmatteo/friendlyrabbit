@@ -36,7 +36,7 @@ func TestRabbitServicePublish(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
 	data := mock.RandomBytes(1000)
-	err := RabbitService.Publish(context.Background(), data, "", "TestUnitQueue", "", false, nil)
+	err := RabbitService.Publish(context.Background(), data, "", "TestUnitQueue", "", nil)
 	assert.NoError(t, err)
 }
 
