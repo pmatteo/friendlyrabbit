@@ -14,7 +14,7 @@ import (
 func TestConsumingAfterPublish(t *testing.T) {
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
@@ -60,7 +60,7 @@ func TestConsumingAftersPublishLarge(t *testing.T) {
 
 	defer leaktest.CheckTimeout(t, 1*time.Minute)() // Fail on leaked goroutines.
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
@@ -106,7 +106,7 @@ func TestConsumingAfterPublishConfirmationLarge(t *testing.T) {
 
 	defer leaktest.Check(t)() // Fail on leaked goroutines.
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
@@ -151,7 +151,7 @@ func TestPublishConfirmation(t *testing.T) {
 	timeoutAfter := time.After(time.Minute * 2)
 	done1 := make(chan struct{}, 1)
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 

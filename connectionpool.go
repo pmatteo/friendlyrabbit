@@ -25,23 +25,8 @@ type ConnectionPool struct {
 	unhealthyHandler     func(error)
 }
 
-// NewConnectionPool creates hosting structure for the ConnectionPool.
-func NewConnectionPool(config *PoolConfig) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, nil, nil)
-}
-
-// NewConnectionPoolWithErrorHandler creates hosting structure for the ConnectionPool with an error handler.
-func NewConnectionPoolWithErrorHandler(config *PoolConfig, errorHandler func(error)) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, errorHandler, nil)
-}
-
-// NewConnectionPoolWithUnhealthyHandler creates hosting structure for the ConnectionPool with an unhealthy handler.
-func NewConnectionPoolWithUnhealthyHandler(config *PoolConfig, unhealthyHandler func(error)) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, nil, unhealthyHandler)
-}
-
-// NewConnectionPoolWithHandlers creates hosting structure for the ConnectionPool with an error and/or unhealthy handler.
-func NewConnectionPoolWithHandlers(config *PoolConfig, errorHandler func(error), unhealthyHandler func(error)) (*ConnectionPool, error) {
+// NewConnectionPool creates hosting structure for the ConnectionPool with an error and/or unhealthy handler.
+func NewConnectionPool(config *PoolConfig, errorHandler func(error), unhealthyHandler func(error)) (*ConnectionPool, error) {
 	if config.Heartbeat == 0 || config.ConnectionTimeout == 0 {
 		return nil, errors.New("connectionpool heartbeat or connectiontimeout can't be 0")
 	}

@@ -149,7 +149,7 @@ func TestPublishWithConfirmationAccuracy(t *testing.T) {
 		fmt.Printf("Messages: %f msg/s\r\n", float64(count)/diff.Seconds())
 	}()
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 
 	publisher := fr.NewPublisher(Seasoning, connectionPool)
