@@ -1,9 +1,9 @@
 package friendlyrabbit
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	utils_json "github.com/pmatteo/friendlyrabbit/internal/utils/json"
@@ -95,90 +95,82 @@ func (msg *ReceivedMessage) Reject(requeue bool) error {
 	return msg.Delivery.Acknowledger.Reject(msg.Delivery.DeliveryTag, requeue)
 }
 
-// ErrorMessage allow for you to replay a message that was returned.
-type ErrorMessage struct {
-	Code    int
-	Reason  string
-	Server  bool
-	Recover bool
+// Letter contains the message body and address of where things are going.
+type Letter struct {
+	LetterID   uuid.UUID
+	RetryCount uint32
+	Body       []byte
+	Envelope   *Envelope
 }
 
-// NewErrorMessage creates a new ErrorMessage.
-func NewErrorMessage(amqpError *amqp.Error) *ErrorMessage {
+// Envelope contains all the address details of where a letter is going.
+type Envelope struct {
+	Ctx           context.Context
+	Exchange      string
+	RoutingKey    string
+	ContentType   string
+	CorrelationID string
+	Type          string
+	Mandatory     bool
+	Immediate     bool
+	Headers       amqp.Table
+	DeliveryMode  uint8
+	Priority      uint8
+}
 
-	return &ErrorMessage{
-		Code:    amqpError.Code,
-		Reason:  amqpError.Reason,
-		Server:  amqpError.Server,
-		Recover: amqpError.Recover,
+func NewEnvelope(
+	ctx context.Context,
+	exchangeName string,
+	routingKey string,
+	headers amqp.Table,
+) *Envelope {
+	return &Envelope{
+		Ctx:          context.Background(),
+		Exchange:     exchangeName,
+		RoutingKey:   routingKey,
+		ContentType:  "application/json",
+		Mandatory:    false,
+		Immediate:    false,
+		DeliveryMode: amqp.Persistent,
+		Headers:      headers,
 	}
 }
 
-// Error allows you to quickly log the ErrorMessage struct as a string.
-func (em *ErrorMessage) Error() string {
-	return fmt.Sprintf("[ErrorCode: %d] Reason: %s \r\n[Server Initiated: %v]\r\n[Recoverable: %v]\r\n", em.Code, em.Reason, em.Server, em.Recover)
-}
+func NewLetterWithPayload(
+	envelope *Envelope,
+	data interface{},
+	encryption *EncryptionConfig,
+	compression *CompressionConfig,
+	wrapPayload bool,
+	metadata string,
+) (*Letter, error) {
+	var letterID = uuid.New()
 
-// ReturnMessage allow for you to replay a message that was returned.
-type ReturnMessage struct {
-	ReplyCode  uint16 // reason
-	ReplyText  string // description
-	Exchange   string // basic.publish exchange
-	RoutingKey string // basic.publish routing key
-
-	// Properties
-	ContentType     string                 // MIME content type
-	ContentEncoding string                 // MIME content encoding
-	Headers         map[string]interface{} // Application or header exchange table
-	DeliveryMode    uint8                  // queue implementation use - non-persistent (1) or persistent (2)
-	Priority        uint8                  // queue implementation use - 0 to 9
-	CorrelationID   string                 // application use - correlation identifier
-	ReplyTo         string                 // application use - address to to reply to (ex: RPC)
-	Expiration      string                 // implementation use - message expiration spec
-	MessageID       string                 // application use - message identifier
-	Timestamp       time.Time              // application use - message timestamp
-	Type            string                 // application use - message type name
-	UserID          string                 // application use - creating user id
-	AppID           string                 // application use - creating application
-
-	Body []byte
-}
-
-// NewReturnMessage creates a new ReturnMessage.
-func NewReturnMessage(amqpReturn *amqp.Return) *ReturnMessage {
-
-	return &ReturnMessage{
-		ReplyCode:       amqpReturn.ReplyCode,
-		ReplyText:       amqpReturn.ReplyText,
-		Exchange:        amqpReturn.Exchange,
-		RoutingKey:      amqpReturn.RoutingKey,
-		ContentType:     amqpReturn.ContentType,
-		ContentEncoding: amqpReturn.ContentEncoding,
-		Headers:         amqpReturn.Headers,
-		DeliveryMode:    amqpReturn.DeliveryMode,
-		Priority:        amqpReturn.Priority,
-		CorrelationID:   amqpReturn.CorrelationId,
-		ReplyTo:         amqpReturn.ReplyTo,
-		Expiration:      amqpReturn.Expiration,
-		MessageID:       amqpReturn.MessageId,
-		Timestamp:       amqpReturn.Timestamp,
-		Type:            amqpReturn.Type,
-		UserID:          amqpReturn.UserId,
-		AppID:           amqpReturn.AppId,
+	if wrapPayload {
+		body, err := ToWrappedPayload(data, letterID, metadata, compression, encryption)
+		if err != nil {
+			return nil, err
+		}
+		return NewLetter(letterID, envelope, body), nil
 	}
+
+	body, err := ToPayload(data, compression, encryption)
+	if err != nil {
+		return nil, err
+	}
+	return NewLetter(letterID, envelope, body), nil
 }
 
-// PublishConfirmation aids in guaranteed Deliverability.
-type PublishConfirmation struct {
-	DeliveryTag uint64 // Delivery Tag Id
-	Acked       bool   // Acked Serverside
-}
-
-// NewPublishConfirmation creates a new PublishConfirmation.
-func NewPublishConfirmation(confirmation *amqp.Confirmation) *PublishConfirmation {
-
-	return &PublishConfirmation{
-		DeliveryTag: confirmation.DeliveryTag,
-		Acked:       confirmation.Ack,
+// CreateLetter creates a simple letter for publishing.
+func NewLetter(
+	letterID uuid.UUID,
+	envelope *Envelope,
+	body []byte,
+) *Letter {
+	return &Letter{
+		LetterID:   letterID,
+		RetryCount: uint32(3),
+		Body:       body,
+		Envelope:   envelope,
 	}
 }

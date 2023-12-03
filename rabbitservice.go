@@ -36,7 +36,7 @@ func NewRabbitService(
 	processPublishReceipts func(*PublishReceipt),
 	processError func(error)) (*RabbitService, error) {
 
-	connectionPool, err := NewConnectionPool(config.PoolConfig)
+	connectionPool, err := NewConnectionPool(config.PoolConfig, nil, nil)
 	if err != nil {
 		return nil, err
 	}

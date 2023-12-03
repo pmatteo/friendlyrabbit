@@ -19,7 +19,7 @@ func TestCreateTopologyFromTopologyConfig(t *testing.T) {
 	topologyConfig, err := fr.ConvertJSONFileToTopologyConfig(fileNamePath)
 	assert.NoError(t, err)
 
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
@@ -54,7 +54,7 @@ func TestCreateMultipleTopologyFromTopologyConfig(t *testing.T) {
 }
 
 func TestUnbindQueue(t *testing.T) {
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 
@@ -65,7 +65,7 @@ func TestUnbindQueue(t *testing.T) {
 }
 
 func TestCreateQuorumQueue(t *testing.T) {
-	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	connectionPool, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.NoError(t, err)
 	defer connectionPool.Shutdown()
 

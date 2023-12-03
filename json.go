@@ -39,8 +39,25 @@ func ConvertJSONFileToTopologyConfig(fileNamePath string) (*TopologyConfig, erro
 	return config, err
 }
 
-// CreatePayload creates a JSON marshal and optionally compresses and encrypts the bytes.
-func CreatePayload(
+// WrappedBody is to go inside a Letter struct with indications of the body of data being modified (ex., compressed).
+type WrappedBody struct {
+	LetterID       uuid.UUID   `json:"LetterID"`
+	Body           *ModdedBody `json:"Body"`
+	LetterMetadata string      `json:"LetterMetadata"`
+}
+
+// ModdedBody is a payload with modifications and indicators of what was modified.
+type ModdedBody struct {
+	Encrypted   bool   `json:"Encrypted"`
+	EType       string `json:"EncryptionType,omitempty"`
+	Compressed  bool   `json:"Compressed"`
+	CType       string `json:"CompressionType,omitempty"`
+	UTCDateTime string `json:"UTCDateTime"`
+	Data        []byte `json:"Data"`
+}
+
+// ToPayload creates a JSON marshal and optionally compresses and encrypts the bytes.
+func ToPayload(
 	input interface{},
 	compressionConf *CompressionConfig,
 	encryptionConf *EncryptionConfig,
@@ -75,8 +92,8 @@ func CreatePayload(
 	return data, nil
 }
 
-// CreateWrappedPayload wraps your data in a plaintext wrapper called ModdedLetter and performs the selected modifications to data.
-func CreateWrappedPayload(
+// ToWrappedPayload wraps your data in a plaintext wrapper called ModdedLetter and performs the selected modifications to data.
+func ToWrappedPayload(
 	input interface{},
 	letterID uuid.UUID,
 	metadata string,

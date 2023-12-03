@@ -189,7 +189,7 @@ func TestCreateAndReadCompressedPayload(t *testing.T) {
 	}
 
 	t.Logf("Test Data Size: ~ %d letters", 20000)
-	data, err := fr.CreatePayload(test, compression, encrypt)
+	data, err := fr.ToPayload(test, compression, encrypt)
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, len(data))
 	t.Logf("Compressed Payload Size: ~ %d bytes", len(data))
@@ -236,7 +236,7 @@ func TestCreateAndReadEncryptedPayload(t *testing.T) {
 	}
 
 	t.Logf("Test Data Size: ~ %d letters", 20000)
-	data, err := fr.CreatePayload(test, compression, encrypt)
+	data, err := fr.ToPayload(test, compression, encrypt)
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, len(data))
 	t.Logf("Encrypted Payload Size: ~ %d bytes", len(data))
@@ -283,7 +283,7 @@ func TestCreateAndReadCompressedEncryptedPayload(t *testing.T) {
 	}
 
 	t.Logf("Test Data Size: ~ %d letters", 20000)
-	data, err := fr.CreatePayload(test, compression, encrypt)
+	data, err := fr.ToPayload(test, compression, encrypt)
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, len(data))
 	t.Logf("Compressed & Encrypted Payload Size: ~ %d bytes", len(data))
@@ -330,7 +330,7 @@ func TestCreateAndReadLZCompressedEncryptedPayload(t *testing.T) {
 	}
 
 	t.Logf("Test Data Size: ~ %d letters", 20000)
-	data, err := fr.CreatePayload(test, compression, encrypt)
+	data, err := fr.ToPayload(test, compression, encrypt)
 	assert.NoError(t, err)
 	assert.NotEqual(t, 0, len(data))
 	t.Logf("Compressed & Encrypted Payload Size: ~ %d bytes", len(data))

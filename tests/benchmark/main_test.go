@@ -62,7 +62,7 @@ func setup() error {
 		},
 	}
 
-	connectionPool, err = fr.NewConnectionPool(seasoning.PoolConfig)
+	connectionPool, err = fr.NewConnectionPool(seasoning.PoolConfig, nil, nil)
 	if err != nil {
 		return err
 	}

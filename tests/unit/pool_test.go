@@ -14,7 +14,7 @@ func TestConnectionPoolCreateWithWrongURI(t *testing.T) {
 	old := Seasoning.PoolConfig.URI
 	Seasoning.PoolConfig.URI = "amqp://wrong:wrong@localhost:1111/"
 
-	cp, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	cp, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.Nil(t, cp)
 	assert.Error(t, err)
 
@@ -27,7 +27,7 @@ func TestConnectionPoolCreateWithZeroConnections(t *testing.T) {
 	old := Seasoning.PoolConfig.MaxConnectionCount
 	Seasoning.PoolConfig.MaxConnectionCount = 0
 
-	cp, err := fr.NewConnectionPool(Seasoning.PoolConfig)
+	cp, err := fr.NewConnectionPool(Seasoning.PoolConfig, nil, nil)
 	assert.Nil(t, cp)
 	assert.Error(t, err)
 
@@ -42,7 +42,7 @@ func TestConnectionPoolCreateWithErrorHandler(t *testing.T) {
 		return
 	}
 
-	cp, err := fr.NewConnectionPoolWithErrorHandler(seasoning.PoolConfig, func(err error) {})
+	cp, err := fr.NewConnectionPool(seasoning.PoolConfig, func(err error) {}, nil)
 	assert.Nil(t, cp)
 	assert.Error(t, err)
 }

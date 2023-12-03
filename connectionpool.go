@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Workiva/go-datastructures/queue"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // ConnectionPool houses the pool of RabbitMQ connections.
@@ -26,23 +25,8 @@ type ConnectionPool struct {
 	unhealthyHandler     func(error)
 }
 
-// NewConnectionPool creates hosting structure for the ConnectionPool.
-func NewConnectionPool(config *PoolConfig) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, nil, nil)
-}
-
-// NewConnectionPoolWithErrorHandler creates hosting structure for the ConnectionPool with an error handler.
-func NewConnectionPoolWithErrorHandler(config *PoolConfig, errorHandler func(error)) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, errorHandler, nil)
-}
-
-// NewConnectionPoolWithUnhealthyHandler creates hosting structure for the ConnectionPool with an unhealthy handler.
-func NewConnectionPoolWithUnhealthyHandler(config *PoolConfig, unhealthyHandler func(error)) (*ConnectionPool, error) {
-	return NewConnectionPoolWithHandlers(config, nil, unhealthyHandler)
-}
-
-// NewConnectionPoolWithHandlers creates hosting structure for the ConnectionPool with an error and/or unhealthy handler.
-func NewConnectionPoolWithHandlers(config *PoolConfig, errorHandler func(error), unhealthyHandler func(error)) (*ConnectionPool, error) {
+// NewConnectionPool creates hosting structure for the ConnectionPool with an error and/or unhealthy handler.
+func NewConnectionPool(config *PoolConfig, errorHandler func(error), unhealthyHandler func(error)) (*ConnectionPool, error) {
 	if config.Heartbeat == 0 || config.ConnectionTimeout == 0 {
 		return nil, errors.New("connectionpool heartbeat or connectiontimeout can't be 0")
 	}
@@ -101,7 +85,7 @@ func (cp *ConnectionPool) initializeConnections() bool {
 	}
 
 	for i := uint64(0); i < cp.Config.MaxCacheChannelCount; i++ {
-		cp.channels <- cp.createCacheChannel(i)
+		cp.channels <- cp.createCacheChannel(i, true)
 	}
 
 	return true
@@ -218,7 +202,7 @@ func (cp *ConnectionPool) GetChannelFromPool() *ChannelHost {
 func (cp *ConnectionPool) ReturnChannel(chanHost *ChannelHost, erred bool) {
 
 	// If called by user with the wrong channel don't add a non-managed channel back to the channel cache.
-	if chanHost.CachedChannel {
+	if chanHost.transient {
 		if erred {
 			cp.reconnectChannel(chanHost) // <- blocking operation
 		}
@@ -250,7 +234,7 @@ func (cp *ConnectionPool) reconnectChannel(chanHost *ChannelHost) {
 }
 
 // createCacheChannel allows you create a cached ChannelHost which helps wrap Amqp Channel functionality.
-func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
+func (cp *ConnectionPool) createCacheChannel(id uint64, cacheble bool) *ChannelHost {
 
 	// InfiniteLoop: Stay till we have a good channel.
 	for {
@@ -260,7 +244,7 @@ func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
 			continue
 		}
 
-		chanHost, err := NewChannelHost(connHost, id, connHost.ConnectionID, true, true)
+		chanHost, err := NewChannelHost(connHost, id, connHost.ConnectionID, true, cacheble)
 		if err != nil {
 			cp.handleError(err)
 			cp.ReturnConnection(connHost, true)
@@ -273,34 +257,9 @@ func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
 }
 
 // GetTransientChannel allows you create an unmanaged amqp Channel with the help of the ConnectionPool.
-func (cp *ConnectionPool) GetTransientChannel(ackable bool) *amqp.Channel {
+func (cp *ConnectionPool) GetTransientChannel(ackable bool) *ChannelHost {
 
-	// InfiniteLoop: Stay till we have a good channel.
-	for {
-		connHost, err := cp.GetConnection()
-		if err != nil {
-			cp.handleError(err)
-			continue
-		}
-
-		channel, err := connHost.Connection.Channel()
-		if err != nil {
-			cp.handleError(err)
-			cp.ReturnConnection(connHost, true)
-			continue
-		}
-
-		cp.ReturnConnection(connHost, false)
-
-		if ackable {
-			err := channel.Confirm(false)
-			if err != nil {
-				cp.handleError(err)
-				continue
-			}
-		}
-		return channel
-	}
+	return cp.createCacheChannel(0, false)
 }
 
 // UnflagConnection flags that connection as usable in the future.
