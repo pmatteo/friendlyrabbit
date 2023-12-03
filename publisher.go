@@ -59,20 +59,20 @@ func (pub *Publisher) Publish(letter *Letter, receipt bool) error {
 	chanHost := pub.ConnectionPool.GetChannelFromPool()
 
 	err := chanHost.Channel.PublishWithContext(
-		letter.Envelope.Ctx,
-		letter.Envelope.Exchange,
-		letter.Envelope.RoutingKey,
-		letter.Envelope.Mandatory,
-		letter.Envelope.Immediate,
+		letter.opts.Ctx,
+		letter.opts.Exchange,
+		letter.opts.RoutingKey,
+		letter.opts.Mandatory,
+		letter.opts.Immediate,
 		amqp.Publishing{
-			ContentType:   letter.Envelope.ContentType,
+			ContentType:   letter.opts.ContentType,
 			Body:          letter.Body,
-			Headers:       letter.Envelope.Headers,
-			DeliveryMode:  letter.Envelope.DeliveryMode,
-			Priority:      letter.Envelope.Priority,
+			Headers:       letter.opts.Headers,
+			DeliveryMode:  letter.opts.DeliveryMode,
+			Priority:      letter.opts.Priority,
 			MessageId:     letter.LetterID.String(),
-			CorrelationId: letter.Envelope.CorrelationID,
-			Type:          letter.Envelope.Type,
+			CorrelationId: letter.opts.CorrelationID,
+			Type:          letter.opts.MessageType,
 			Timestamp:     time.Now().UTC(),
 			AppId:         pub.ConnectionPool.Config.ApplicationName,
 		},
@@ -104,20 +104,20 @@ func (pub *Publisher) PublishWithTransient(letter *Letter) error {
 	}()
 
 	return ch.Channel.PublishWithContext(
-		letter.Envelope.Ctx,
-		letter.Envelope.Exchange,
-		letter.Envelope.RoutingKey,
-		letter.Envelope.Mandatory,
-		letter.Envelope.Immediate,
+		letter.opts.Ctx,
+		letter.opts.Exchange,
+		letter.opts.RoutingKey,
+		letter.opts.Mandatory,
+		letter.opts.Immediate,
 		amqp.Publishing{
-			ContentType:   letter.Envelope.ContentType,
+			ContentType:   letter.opts.ContentType,
 			Body:          letter.Body,
-			Headers:       letter.Envelope.Headers,
-			DeliveryMode:  letter.Envelope.DeliveryMode,
-			Priority:      letter.Envelope.Priority,
+			Headers:       letter.opts.Headers,
+			DeliveryMode:  letter.opts.DeliveryMode,
+			Priority:      letter.opts.Priority,
 			MessageId:     letter.LetterID.String(),
-			CorrelationId: letter.Envelope.CorrelationID,
-			Type:          letter.Envelope.Type,
+			CorrelationId: letter.opts.CorrelationID,
+			Type:          letter.opts.MessageType,
 			Timestamp:     time.Now().UTC(),
 			AppId:         pub.ConnectionPool.Config.ApplicationName,
 		},
@@ -213,20 +213,20 @@ func (pub *Publisher) publishDeferredConfirm(ch *ChannelHost, letter *Letter) (*
 
 	// TODO move this to a separate function inside ChannelHost
 	dConfirmation, err := ch.Channel.PublishWithDeferredConfirmWithContext(
-		letter.Envelope.Ctx,
-		letter.Envelope.Exchange,
-		letter.Envelope.RoutingKey,
-		letter.Envelope.Mandatory,
-		letter.Envelope.Immediate,
+		letter.opts.Ctx,
+		letter.opts.Exchange,
+		letter.opts.RoutingKey,
+		letter.opts.Mandatory,
+		letter.opts.Immediate,
 		amqp.Publishing{
-			ContentType:   letter.Envelope.ContentType,
+			ContentType:   letter.opts.ContentType,
 			Body:          letter.Body,
-			Headers:       letter.Envelope.Headers,
-			DeliveryMode:  letter.Envelope.DeliveryMode,
-			Priority:      letter.Envelope.Priority,
+			Headers:       letter.opts.Headers,
+			DeliveryMode:  letter.opts.DeliveryMode,
+			Priority:      letter.opts.Priority,
 			MessageId:     letter.LetterID.String(),
-			CorrelationId: letter.Envelope.CorrelationID,
-			Type:          letter.Envelope.Type,
+			CorrelationId: letter.opts.CorrelationID,
+			Type:          letter.opts.MessageType,
 			Timestamp:     time.Now().UTC(),
 			AppId:         pub.ConnectionPool.Config.ApplicationName,
 		},
@@ -245,7 +245,7 @@ func waitPublishConfirmation(dConf *amqp.DeferredConfirmation, letter *Letter, t
 	// Wait for very next confirmation on this channel, which should be our confirmation.
 	for {
 		select {
-		case <-letter.Envelope.Ctx.Done():
+		case <-letter.Done():
 			err := fmt.Errorf(CONFIRMATION_CANCEL, letter.LetterID.String())
 			return false, err
 
@@ -393,12 +393,12 @@ func (pub *Publisher) publishReceipt(letter *Letter, err error) {
 		publishReceipt := &PublishReceipt{
 			LetterID: letter.LetterID,
 			Error:    err,
+			Success:  err == nil,
 		}
 
-		if err == nil {
-			publishReceipt.Success = true
-		} else {
+		if !publishReceipt.Success {
 			publishReceipt.FailedLetter = letter
+			publishReceipt.FailedLetter.opts.RetryCount++
 		}
 
 		pub.publishReceipts <- publishReceipt

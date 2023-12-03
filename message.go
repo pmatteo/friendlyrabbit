@@ -95,82 +95,112 @@ func (msg *ReceivedMessage) Reject(requeue bool) error {
 	return msg.Delivery.Acknowledger.Reject(msg.Delivery.DeliveryTag, requeue)
 }
 
-// Letter contains the message body and address of where things are going.
-type Letter struct {
-	LetterID   uuid.UUID
-	RetryCount uint32
-	Body       []byte
-	Envelope   *Envelope
-}
+type LetterOpts struct {
+	Ctx context.Context
 
-// Envelope contains all the address details of where a letter is going.
-type Envelope struct {
-	Ctx           context.Context
 	Exchange      string
 	RoutingKey    string
 	ContentType   string
 	CorrelationID string
-	Type          string
+	MessageType   string
 	Mandatory     bool
 	Immediate     bool
-	Headers       amqp.Table
+	Headers       map[string]interface{}
 	DeliveryMode  uint8
 	Priority      uint8
+	RetryCount    uint16
+
+	EConf *EncryptionConfig
+	CConf *CompressionConfig
 }
 
-func NewEnvelope(
-	ctx context.Context,
-	exchangeName string,
-	routingKey string,
-	headers amqp.Table,
-) *Envelope {
-	return &Envelope{
-		Ctx:          context.Background(),
-		Exchange:     exchangeName,
-		RoutingKey:   routingKey,
-		ContentType:  "application/json",
-		Mandatory:    false,
-		Immediate:    false,
-		DeliveryMode: amqp.Persistent,
-		Headers:      headers,
+type LetterOptsFun func(*LetterOpts)
+
+func defaultOpts(e, rk string) *LetterOpts {
+	return &LetterOpts{
+		Ctx:           context.Background(),
+		Exchange:      e,
+		RoutingKey:    rk,
+		ContentType:   "application/json",
+		CorrelationID: "",
+		MessageType:   "",
+		Mandatory:     false,
+		Immediate:     false,
+		Headers:       map[string]interface{}{},
+		DeliveryMode:  amqp.Persistent,
+		Priority:      0,
+		RetryCount:    3,
+		EConf:         nil,
+		CConf:         nil,
 	}
 }
 
-func NewLetterWithPayload(
-	envelope *Envelope,
-	data interface{},
-	encryption *EncryptionConfig,
-	compression *CompressionConfig,
-	wrapPayload bool,
-	metadata string,
-) (*Letter, error) {
-	var letterID = uuid.New()
+func WithContext(ctx context.Context) LetterOptsFun {
+	return func(o *LetterOpts) {
+		o.Ctx = ctx
+	}
+}
 
-	if wrapPayload {
-		body, err := ToWrappedPayload(data, letterID, metadata, compression, encryption)
-		if err != nil {
-			return nil, err
+func WithCorrelationID(correlationID string) LetterOptsFun {
+	return func(o *LetterOpts) {
+		o.CorrelationID = correlationID
+	}
+}
+
+func WithHeaders(h map[string]interface{}) LetterOptsFun {
+	return func(o *LetterOpts) {
+		for k, v := range h {
+			o.Headers[k] = v
 		}
-		return NewLetter(letterID, envelope, body), nil
+	}
+}
+
+func WithEncryptionConfig(eConf *EncryptionConfig) LetterOptsFun {
+	return func(o *LetterOpts) {
+		o.EConf = eConf
+	}
+}
+
+func WithCompressionConfig(cConf *CompressionConfig) LetterOptsFun {
+	return func(o *LetterOpts) {
+		o.CConf = cConf
+	}
+}
+
+// Letter contains the message body and address of where things are going.
+type Letter struct {
+	LetterID uuid.UUID
+	Body     []byte
+	opts     *LetterOpts
+}
+
+func NewLetter(
+	exchange string,
+	routingKey string,
+	data interface{},
+	optsFuns ...LetterOptsFun,
+) (*Letter, error) {
+	opts := defaultOpts(exchange, routingKey)
+	for _, f := range optsFuns {
+		f(opts)
 	}
 
-	body, err := ToPayload(data, compression, encryption)
+	var body []byte
+	var err error
+
+	body, err = ToPayload(data, opts.CConf, opts.EConf)
+
 	if err != nil {
 		return nil, err
 	}
-	return NewLetter(letterID, envelope, body), nil
+
+	return &Letter{LetterID: uuid.New(), Body: body, opts: opts}, nil
 }
 
-// CreateLetter creates a simple letter for publishing.
-func NewLetter(
-	letterID uuid.UUID,
-	envelope *Envelope,
-	body []byte,
-) *Letter {
-	return &Letter{
-		LetterID:   letterID,
-		RetryCount: uint32(3),
-		Body:       body,
-		Envelope:   envelope,
-	}
+func (l *Letter) Done() <-chan struct{} {
+	return l.opts.Ctx.Done()
+}
+
+func (l *Letter) Options() LetterOpts {
+	return *l.opts
 }

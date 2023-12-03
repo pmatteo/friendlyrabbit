@@ -76,7 +76,7 @@ type PublisherConfig struct {
 	SleepOnIdleInterval    uint32 `json:"SleepOnIdleInterval" yaml:"SleepOnIdleInterval"`
 	SleepOnErrorInterval   uint32 `json:"SleepOnErrorInterval" yaml:"SleepOnErrorInterval"`
 	PublishTimeOutInterval uint32 `json:"PublishTimeOutInterval" yaml:"PublishTimeOutInterval"`
-	MaxRetryCount          uint32 `json:"MaxRetryCount" yaml:"MaxRetryCount"`
+	MaxRetryCount          uint16 `json:"MaxRetryCount" yaml:"MaxRetryCount"`
 }
 
 // TopologyConfig allows you to build simple toplogies from a JSON file.

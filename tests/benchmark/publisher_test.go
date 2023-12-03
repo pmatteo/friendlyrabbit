@@ -73,7 +73,7 @@ PublishLoop:
 		case <-timeout:
 			break PublishLoop
 		default:
-			newLetter := mock.CreateMockRandomWrappedBodyLetter("TestBenchmarkQueue")
+			newLetter := mock.CreateMockRandomLetter("TestBenchmarkQueue")
 			conMap.Set(newLetter.LetterID.String(), false)
 			_ = publisher.Publish(newLetter, true)
 

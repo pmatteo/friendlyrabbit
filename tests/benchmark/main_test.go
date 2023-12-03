@@ -1,12 +1,12 @@
 package benchmark_tests
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	cmap "github.com/orcaman/concurrent-map"
 	fr "github.com/pmatteo/friendlyrabbit"
 	"github.com/pmatteo/friendlyrabbit/tests/mock"
@@ -123,8 +123,11 @@ PublishLoop:
 		case <-timeout:
 			break PublishLoop
 		default:
-			newLetter := mock.CreateMockRandomWrappedBodyLetter("TestBenchmarkQueue")
-			conMap.Set(newLetter.LetterID.String(), false)
+			cId := uuid.New()
+			conMap.Set(cId.String(), false)
+			newLetter := mock.CreateMockRandomLetter("TestBenchmarkQueue", func(lo *fr.LetterOpts) {
+				lo.CorrelationID = cId.String()
+			})
 			_ = publisher.PublishWithConfirmation(newLetter, time.Second)
 
 			notice := <-publisher.PublishReceipts()
@@ -173,20 +176,20 @@ ConsumeLoop:
 			consumerErrors++
 
 		case message := <-consumer.ReceivedMessages():
-			body, err := readWrappedBodyFromJSONBytes(message.Delivery.Body)
-			assert.NoError(b, err, "message was not deserializeable")
+			cid := message.Delivery.CorrelationId
+			assert.NotEmpty(b, cid, "message has no CorrelationId")
 
 			// Accuracy check
-			tmp, ok := conMap.Get(body.LetterID.String())
-			assert.True(b, ok, "letter (%s) received that wasn't published!", body.LetterID.String())
+			tmp, ok := conMap.Get(cid)
+			assert.True(b, ok, "letter (%s) received that wasn't published!", cid)
 
 			state := tmp.(bool)
-			assert.False(b, state, "duplicate letter (%s) received!", body.LetterID.String())
+			assert.False(b, state, "duplicate letter (%s) received!", cid)
 
 			messagesReceived++
-			conMap.Set(body.LetterID.String(), true)
+			conMap.Set(cid, true)
 
-			err = message.Acknowledge()
+			err := message.Acknowledge()
 			if err != nil {
 				messagesFailedToAck++
 			} else {
@@ -203,12 +206,4 @@ ConsumeLoop:
 	b.Logf("Messages Received: %d\r\n", messagesReceived)
 
 	done <- true
-}
-
-// ReadWrappedBodyFromJSONBytes simply read the bytes as a Letter.
-func readWrappedBodyFromJSONBytes(data []byte) (*fr.WrappedBody, error) {
-	body := &fr.WrappedBody{}
-	err := json.Unmarshal(data, body)
-
-	return body, err
 }

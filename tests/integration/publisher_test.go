@@ -27,13 +27,15 @@ func TestBasicPublishToNonExistentExchange(t *testing.T) {
 	amqpChan, err := amqpConn.Channel()
 	assert.NoError(t, err)
 
+	opts := letter.Options()
+
 	err = amqpChan.PublishWithContext(context.Background(),
-		letter.Envelope.Exchange,
-		letter.Envelope.RoutingKey,
-		letter.Envelope.Mandatory,
-		letter.Envelope.Immediate,
+		opts.Exchange,
+		opts.RoutingKey,
+		opts.Mandatory,
+		opts.Immediate,
 		amqp.Publishing{
-			ContentType: letter.Envelope.ContentType,
+			ContentType: opts.ContentType,
 			Body:        letter.Body,
 			MessageId:   letter.LetterID.String(),
 			Timestamp:   time.Now().UTC(),
@@ -112,8 +114,9 @@ func TestPublishAccuracy(t *testing.T) {
 	}()
 
 	publisher := fr.NewPublisher(Seasoning, RabbitService.ConnectionPool)
-	letter := mock.CreateMockRandomLetter("TestIntegrationQueue")
-	letter.Envelope.DeliveryMode = amqp.Transient
+	letter := mock.CreateMockRandomLetter("TestIntegrationQueue", func(lo *fr.LetterOpts) {
+		lo.DeliveryMode = amqp.Transient
+	})
 
 	for i := 0; i < count; i++ {
 		_ = publisher.Publish(letter, true)
