@@ -57,13 +57,13 @@ func TestTableNewLetterWithPayload(t *testing.T) {
 
 	data := mock.BasicStruct{N: 1, S: "TestUnitQueue"}
 
-	expected, err := fr.CreatePayload(data, nil, nil)
+	expected, err := fr.ToPayload(data, nil, nil)
 	assert.NoError(t, err)
-	expectedCompressed, err := fr.CreatePayload(data, compress, nil)
+	expectedCompressed, err := fr.ToPayload(data, compress, nil)
 	assert.NoError(t, err)
-	expectedEncrypted, err := fr.CreatePayload(data, nil, encrypt)
+	expectedEncrypted, err := fr.ToPayload(data, nil, encrypt)
 	assert.NoError(t, err)
-	expectedComprEncrypt, err := fr.CreatePayload(data, compress, encrypt)
+	expectedComprEncrypt, err := fr.ToPayload(data, compress, encrypt)
 	assert.NoError(t, err)
 
 	var tests = []struct {
