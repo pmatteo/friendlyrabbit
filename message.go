@@ -165,7 +165,6 @@ func WithCompressionConfig(cConf *CompressionConfig) LetterOptsFun {
 	return func(o *LetterOpts) {
 		o.CConf = cConf
 	}
-}
 
 // Letter contains the message body and address of where things are going.
 type Letter struct {

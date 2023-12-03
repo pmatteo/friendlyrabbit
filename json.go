@@ -80,7 +80,64 @@ func ToPayload(
 	return data, nil
 }
 
-// ReadPayload unencrypts and uncompresses payloads
+// ToWrappedPayload wraps your data in a plaintext wrapper called ModdedLetter and performs the selected modifications to data.
+func ToWrappedPayload(
+	input interface{},
+	letterID uuid.UUID,
+	metadata string,
+	compressionConf *CompressionConfig,
+	encryptionConf *EncryptionConfig,
+) ([]byte, error) {
+
+	wrappedBody := &WrappedBody{
+		LetterID:       letterID,
+		LetterMetadata: metadata,
+		Body:           &ModdedBody{},
+	}
+
+	var err error
+	var innerData []byte
+	innerData, err = json.Marshal(&input)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer := &bytes.Buffer{}
+	if compressionConf != nil && compressionConf.Enabled {
+		err := compression.Compress(compressionConf.Type, innerData, buffer)
+		if err != nil {
+			return nil, err
+		}
+
+		// Data is now compressed
+		wrappedBody.Body.Compressed = true
+		wrappedBody.Body.CType = compressionConf.Type
+		innerData = buffer.Bytes()
+	}
+
+	if encryptionConf != nil && encryptionConf.Enabled {
+		err := crypto.Encrypt(encryptionConf.Type, encryptionConf.Hashkey, innerData, buffer)
+		if err != nil {
+			return nil, err
+		}
+
+		// Data is now encrypted
+		wrappedBody.Body.Encrypted = true
+		wrappedBody.Body.EType = encryptionConf.Type
+		innerData = buffer.Bytes()
+	}
+
+	wrappedBody.Body.UTCDateTime = utils_json.UtcTimestamp()
+	wrappedBody.Body.Data = innerData
+
+	data, err := json.Marshal(&wrappedBody)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
 func ReadPayload(
 	buffer *bytes.Buffer,
 	compressionConf *CompressionConfig,
