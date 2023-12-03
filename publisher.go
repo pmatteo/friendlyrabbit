@@ -15,18 +15,16 @@ const (
 
 // Publisher contains everything you need to publish a message.
 type Publisher struct {
-	Config           *RabbitSeasoning
-	ConnectionPool   *ConnectionPool
-	letters          chan *Letter
-	autoStop         chan bool
-	publishReceipts  chan *PublishReceipt
-	autoStarted      bool
-	autoPublishGroup *sync.WaitGroup
-	sleepOnIdle      time.Duration
-	sleepOnError     time.Duration
-	PublishTimeout   time.Duration
-	pubLock          *sync.Mutex
-	pubRWLock        *sync.RWMutex
+	Config          *RabbitSeasoning
+	ConnectionPool  *ConnectionPool
+	letters         chan *Letter
+	autoStop        chan bool
+	publishReceipts chan *PublishReceipt
+	autoStarted     bool
+	sleepOnIdle     time.Duration
+	sleepOnError    time.Duration
+	PublishTimeout  time.Duration
+	pubLock         *sync.Mutex
 }
 
 // NewPublisher creates and configures a new Publisher.
@@ -37,18 +35,16 @@ func NewPublisher(conf *RabbitSeasoning, cp *ConnectionPool) *Publisher {
 	}
 
 	return &Publisher{
-		Config:           conf,
-		ConnectionPool:   cp,
-		letters:          make(chan *Letter, 1000),
-		autoStop:         make(chan bool, 1),
-		autoPublishGroup: &sync.WaitGroup{},
-		publishReceipts:  make(chan *PublishReceipt, 1000),
-		sleepOnIdle:      time.Duration(conf.PublisherConfig.SleepOnIdleInterval) * time.Millisecond,
-		sleepOnError:     time.Duration(conf.PublisherConfig.SleepOnErrorInterval) * time.Millisecond,
-		PublishTimeout:   time.Duration(conf.PublisherConfig.PublishTimeOutInterval) * time.Millisecond,
-		pubLock:          &sync.Mutex{},
-		pubRWLock:        &sync.RWMutex{},
-		autoStarted:      false,
+		Config:          conf,
+		ConnectionPool:  cp,
+		letters:         make(chan *Letter, 1000), // TODO make channel size configurable
+		autoStop:        make(chan bool, 1),
+		publishReceipts: make(chan *PublishReceipt, 1000), // TODO make channel size configurable
+		sleepOnIdle:     time.Duration(conf.PublisherConfig.SleepOnIdleInterval) * time.Millisecond,
+		sleepOnError:    time.Duration(conf.PublisherConfig.SleepOnErrorInterval) * time.Millisecond,
+		PublishTimeout:  time.Duration(conf.PublisherConfig.PublishTimeOutInterval) * time.Millisecond,
+		pubLock:         &sync.Mutex{},
+		autoStarted:     false,
 	}
 }
 
@@ -328,11 +324,8 @@ func (pub *Publisher) deliverLetters() bool {
 
 			default:
 
-				if pub.sleepOnIdle > 0 {
-					time.Sleep(pub.sleepOnIdle)
-				}
+				time.Sleep(pub.sleepOnIdle)
 				break PublishLoop
-
 			}
 		}
 
