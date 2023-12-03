@@ -17,6 +17,7 @@ type ChannelHost struct {
 	Errors        chan *amqp.Error
 	connHost      *ConnectionHost
 	chanLock      *sync.Mutex
+	transient     bool
 }
 
 // NewChannelHost creates a simple ChannelHost wrapper for management by end-user developer.
@@ -24,7 +25,8 @@ func NewChannelHost(
 	connHost *ConnectionHost,
 	id uint64,
 	connectionID uint64,
-	ackable, cached bool) (*ChannelHost, error) {
+	ackable, cached bool,
+) (*ChannelHost, error) {
 
 	if connHost.Connection.IsClosed() {
 		return nil, errors.New("can't open a channel - connection is already closed")

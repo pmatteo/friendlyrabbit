@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Workiva/go-datastructures/queue"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // ConnectionPool houses the pool of RabbitMQ connections.
@@ -101,7 +100,7 @@ func (cp *ConnectionPool) initializeConnections() bool {
 	}
 
 	for i := uint64(0); i < cp.Config.MaxCacheChannelCount; i++ {
-		cp.channels <- cp.createCacheChannel(i)
+		cp.channels <- cp.createCacheChannel(i, true)
 	}
 
 	return true
@@ -250,7 +249,7 @@ func (cp *ConnectionPool) reconnectChannel(chanHost *ChannelHost) {
 }
 
 // createCacheChannel allows you create a cached ChannelHost which helps wrap Amqp Channel functionality.
-func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
+func (cp *ConnectionPool) createCacheChannel(id uint64, cacheble bool) *ChannelHost {
 
 	// InfiniteLoop: Stay till we have a good channel.
 	for {
@@ -260,7 +259,7 @@ func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
 			continue
 		}
 
-		chanHost, err := NewChannelHost(connHost, id, connHost.ConnectionID, true, true)
+		chanHost, err := NewChannelHost(connHost, id, connHost.ConnectionID, true, cacheble)
 		if err != nil {
 			cp.handleError(err)
 			cp.ReturnConnection(connHost, true)
@@ -273,34 +272,9 @@ func (cp *ConnectionPool) createCacheChannel(id uint64) *ChannelHost {
 }
 
 // GetTransientChannel allows you create an unmanaged amqp Channel with the help of the ConnectionPool.
-func (cp *ConnectionPool) GetTransientChannel(ackable bool) *amqp.Channel {
+func (cp *ConnectionPool) GetTransientChannel(ackable bool) *ChannelHost {
 
-	// InfiniteLoop: Stay till we have a good channel.
-	for {
-		connHost, err := cp.GetConnection()
-		if err != nil {
-			cp.handleError(err)
-			continue
-		}
-
-		channel, err := connHost.Connection.Channel()
-		if err != nil {
-			cp.handleError(err)
-			cp.ReturnConnection(connHost, true)
-			continue
-		}
-
-		cp.ReturnConnection(connHost, false)
-
-		if ackable {
-			err := channel.Confirm(false)
-			if err != nil {
-				cp.handleError(err)
-				continue
-			}
-		}
-		return channel
-	}
+	return cp.createCacheChannel(0, false)
 }
 
 // UnflagConnection flags that connection as usable in the future.

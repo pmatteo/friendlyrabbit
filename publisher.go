@@ -99,15 +99,15 @@ func (pub *Publisher) Publish(letter *Letter, receipt bool) error {
 // For proper resilience (at least once delivery guarantee over shaky network) use PublishWithConfirmation
 func (pub *Publisher) PublishWithTransient(letter *Letter) error {
 
-	channel := pub.ConnectionPool.GetTransientChannel(false)
+	ch := pub.ConnectionPool.GetTransientChannel(false)
 	defer func() {
 		defer func() {
 			_ = recover()
 		}()
-		channel.Close()
+		ch.Channel.Close()
 	}()
 
-	return channel.PublishWithContext(
+	return ch.Channel.PublishWithContext(
 		letter.Envelope.Ctx,
 		letter.Envelope.Exchange,
 		letter.Envelope.RoutingKey,
@@ -146,7 +146,7 @@ func (pub *Publisher) PublishWithConfirmation(letter *Letter, timeout time.Durat
 	for {
 	Publish:
 		chanHost := pub.ConnectionPool.GetChannelFromPool()
-		dConfirmation, err := pub.publishDeferredConfirm(chanHost.Channel, letter)
+		dConfirmation, err := pub.publishDeferredConfirm(chanHost, letter)
 		pub.ConnectionPool.ReturnChannel(chanHost, err != nil)
 
 		if err != nil {
@@ -185,9 +185,9 @@ func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout t
 	for {
 	Publish:
 		// Has to use an Ackable channel for Publish Confirmations.
-		channel := pub.ConnectionPool.GetTransientChannel(true)
-		dConfirmation, err := pub.publishDeferredConfirm(channel, letter)
-		channel.Close()
+		ch := pub.ConnectionPool.GetTransientChannel(true)
+		dConfirmation, err := pub.publishDeferredConfirm(ch, letter)
+		ch.Channel.Close()
 
 		if err != nil {
 			if pub.sleepOnError > 0 {
@@ -213,8 +213,10 @@ func (pub *Publisher) PublishWithConfirmationTransient(letter *Letter, timeout t
 // The letter's envelope properties are used to set the message properties.
 //
 // Returns the deferred confirmation and any error encountered during publishing.
-func (pub *Publisher) publishDeferredConfirm(c *amqp.Channel, letter *Letter) (*amqp.DeferredConfirmation, error) {
-	dConfirmation, err := c.PublishWithDeferredConfirmWithContext(
+func (pub *Publisher) publishDeferredConfirm(ch *ChannelHost, letter *Letter) (*amqp.DeferredConfirmation, error) {
+
+	// TODO move this to a separate function inside ChannelHost
+	dConfirmation, err := ch.Channel.PublishWithDeferredConfirmWithContext(
 		letter.Envelope.Ctx,
 		letter.Envelope.Exchange,
 		letter.Envelope.RoutingKey,

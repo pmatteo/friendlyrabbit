@@ -52,11 +52,11 @@ func NewConsumer(config *ConsumerConfig, cp *ConnectionPool) *Consumer {
 func (con *Consumer) Get(queueName string) (*amqp.Delivery, error) {
 
 	// Get Channel
-	channel := con.ConnectionPool.GetTransientChannel(false)
-	defer channel.Close()
+	ch := con.ConnectionPool.GetTransientChannel(false)
+	defer ch.Close()
 
 	// Get Single Message
-	amqpDelivery, ok, getErr := channel.Get(queueName, true)
+	amqpDelivery, ok, getErr := ch.Channel.Get(queueName, true)
 	if getErr != nil {
 		return nil, getErr
 	}
