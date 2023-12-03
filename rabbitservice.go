@@ -146,7 +146,6 @@ func (rs *RabbitService) PublishWithConfirmation(
 	ctx context.Context,
 	input interface{},
 	exchangeName, routingKey, metadata string,
-	wrapPayload bool,
 	headers amqp.Table,
 ) error {
 
@@ -158,8 +157,12 @@ func (rs *RabbitService) PublishWithConfirmation(
 		return errors.New("can't have a nil body or an empty exchangename with empty routing key")
 	}
 
-	e := NewEnvelope(ctx, exchangeName, routingKey, headers)
-	l, err := NewLetterWithPayload(e, input, rs.Config.EncryptionConfig, rs.Config.CompressionConfig, wrapPayload, metadata)
+	l, err := NewLetter(exchangeName, routingKey, input, func(lo *LetterOpts) {
+		lo.Ctx = ctx
+		lo.EConf = rs.Config.EncryptionConfig
+		lo.CConf = rs.Config.CompressionConfig
+	})
+
 	if err != nil {
 		return err
 	}
@@ -174,7 +177,6 @@ func (rs *RabbitService) Publish(
 	ctx context.Context,
 	input interface{},
 	exchangeName, routingKey, metadata string,
-	wrapPayload bool,
 	headers amqp.Table,
 ) error {
 
@@ -186,8 +188,11 @@ func (rs *RabbitService) Publish(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
-	e := NewEnvelope(ctx, exchangeName, routingKey, nil)
-	l, err := NewLetterWithPayload(e, input, rs.Config.EncryptionConfig, rs.Config.CompressionConfig, wrapPayload, metadata)
+	l, err := NewLetter(exchangeName, routingKey, input, func(lo *LetterOpts) {
+		lo.Ctx = ctx
+		lo.EConf = rs.Config.EncryptionConfig
+		lo.CConf = rs.Config.CompressionConfig
+	})
 	if err != nil {
 		return err
 	}
@@ -200,7 +205,8 @@ func (rs *RabbitService) PublishData(
 	ctx context.Context,
 	data []byte,
 	exchangeName, routingKey string,
-	headers amqp.Table) error {
+	headers map[string]interface{},
+) error {
 
 	if rs.shutdown {
 		return errors.New("unable to publish as service shutdown triggered")
@@ -210,8 +216,17 @@ func (rs *RabbitService) PublishData(
 		return errors.New("can't have a nil input or an empty exchangename with empty routing key")
 	}
 
-	e := NewEnvelope(ctx, exchangeName, routingKey, headers)
-	return rs.Publisher.Publish(NewLetter(uuid.New(), e, data), true)
+	l, err := NewLetter(exchangeName, routingKey, data, func(lo *LetterOpts) {
+		lo.Headers = headers
+		lo.Ctx = ctx
+		lo.EConf = rs.Config.EncryptionConfig
+		lo.CConf = rs.Config.CompressionConfig
+	})
+	if err != nil {
+		return err
+	}
+
+	return rs.Publisher.Publish(l, true)
 }
 
 // PublishLetter wraps around Publisher to simply Publish.
@@ -363,9 +378,8 @@ ProcessLoop:
 		case receipt := <-rs.Publisher.PublishReceipts():
 			if !receipt.Success {
 				if receipt.FailedLetter != nil {
-					if receipt.FailedLetter.RetryCount < rs.Config.PublisherConfig.MaxRetryCount {
-						receipt.FailedLetter.RetryCount++
-						rs.centralErr <- fmt.Errorf("failed to publish LetterID %s... retrying (count: %d)", receipt.LetterID.String(), receipt.FailedLetter.RetryCount)
+					if receipt.FailedLetter.opts.RetryCount <= rs.Config.PublisherConfig.MaxRetryCount {
+						rs.centralErr <- fmt.Errorf("failed to publish LetterID %s... retrying (count: %d)", receipt.LetterID.String(), receipt.FailedLetter.opts.RetryCount)
 						if ok := rs.Publisher.QueueLetter(receipt.FailedLetter); !ok {
 							rs.centralErr <- fmt.Errorf("failed to publish a LetterID %s and autopublisher has been shutdown", receipt.LetterID.String())
 						}
